@@ -2,6 +2,11 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.7 – 2026-07-24
+
+- Reiner Versions-Bump wegen der Store-Cache-Verzögerung im Supervisor. Inhaltlich identisch mit
+  0.1.6 (Token-Fix `SUPERVISOR_TOKEN`/`HASSIO_TOKEN` + Diagnose).
+
 ## 0.1.6 – 2026-07-24
 
 ### Behoben
