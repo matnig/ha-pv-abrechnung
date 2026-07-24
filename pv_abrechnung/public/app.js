@@ -5,6 +5,9 @@ let config = null;
 let entities = [];
 
 const $ = (id) => document.getElementById(id);
+// HTML-Escaping für alle in innerHTML eingesetzten Fremd-/Konfig-Strings (HA-Entitätsnamen,
+// -Zustände, Zähler-/Berichts-Bezeichnungen). Schützt vor XSS über manipulierte Entitätsnamen.
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const api = async (path, opts) => {
   const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
   const data = await res.json().catch(() => ({}));
@@ -21,7 +24,7 @@ function flash(text, ok = true) {
 async function loadEntities() {
   try {
     entities = await api('api/entities');
-    const opts = entities.map((e) => `<option value="${e.entityId}">${e.name} (${e.state} ${e.unit})</option>`).join('');
+    const opts = entities.map((e) => `<option value="${esc(e.entityId)}">${esc(e.name)} (${esc(e.state)} ${esc(e.unit)})</option>`).join('');
     $('mEntity').innerHTML = opts;
     $('vCompEntity').innerHTML = opts;
     if (config) { renderVMeters(); renderDraftComponents(); } // Namen jetzt auflösbar
@@ -35,7 +38,7 @@ function renderMeters() {
     ? `<table><thead><tr><th>Name</th><th>Entität</th><th>Rolle</th><th></th></tr></thead><tbody>${config.meters
         .map(
           (m, i) =>
-            `<tr><td>${m.name}</td><td class="tag">${m.entityId}${m.unit ? ' · ' + m.unit : ''}</td><td>${m.role}</td>
+            `<tr><td>${esc(m.name)}</td><td class="tag">${esc(m.entityId)}${m.unit ? ' · ' + esc(m.unit) : ''}</td><td>${esc(m.role)}</td>
              <td><button class="danger" onclick="delMeter(${i})">×</button></td></tr>`
         )
         .join('')}</tbody></table>`
@@ -60,7 +63,7 @@ function delMeter(i) {
 let draftComponents = [];
 const entityName = (id) => (entities.find((e) => e.entityId === id) || {}).name || id;
 const formulaText = (comps) =>
-  (comps || []).map((c) => `${c.factor < 0 ? '−' : '+'} ${entityName(c.entityId)}`).join(' ').replace(/^\+ /, '');
+  (comps || []).map((c) => `${c.factor < 0 ? '−' : '+'} ${esc(entityName(c.entityId))}`).join(' ').replace(/^\+ /, '');
 
 function renderVMeters() {
   config.virtualMeters = config.virtualMeters || [];
@@ -68,7 +71,7 @@ function renderVMeters() {
     ? `<table><thead><tr><th>Name</th><th>Formel</th><th>Startdatum</th><th>Rückwirkend</th><th></th></tr></thead><tbody>${config.virtualMeters
         .map(
           (v, i) => `<tr>
-            <td>${v.name}<div class="tag">${v.role}</div></td>
+            <td>${esc(v.name)}<div class="tag">${esc(v.role)}</div></td>
             <td class="tag">${formulaText(v.components)}</td>
             <td><input type="date" value="${v.startDate || ''}" onchange="setVmStart(${i}, this.value)" style="max-width:150px" />
                 <div class="mini"><a href="#" onclick="vmRange(${i});return false">frühestes Datum ermitteln</a></div></td>
@@ -108,7 +111,7 @@ async function vmBackfill(i) {
     flash(`Berechnet ab ${r.startDate} (${r.days} Tage). Stand: ${r.currentStand} kWh. — ${det}`);
     $('vmeters').insertAdjacentHTML(
       'afterend',
-      `<div class="hint" id="vmDetail" style="margin-top:6px">Aufschlüsselung ${vm.name}: ${det}. „geliefert" = Summe der faktorisierten Zuwächse, bei 0 gedeckelt.</div>`
+      `<div class="hint" id="vmDetail" style="margin-top:6px">Aufschlüsselung ${esc(vm.name)}: ${esc(det)}. „geliefert" = Summe der faktorisierten Zuwächse, bei 0 gedeckelt.</div>`
     );
     const old = document.querySelectorAll('#vmDetail');
     if (old.length > 1) old[0].remove();
@@ -121,7 +124,7 @@ async function vmBackfill(i) {
 function renderDraftComponents() {
   $('vComponents').innerHTML = draftComponents.length
     ? draftComponents
-        .map((c, i) => `<div class="tag" style="padding:2px 0">${c.factor < 0 ? '−' : '+'} ${entityName(c.entityId)} <a href="#" onclick="rmComponent(${i});return false">entfernen</a></div>`)
+        .map((c, i) => `<div class="tag" style="padding:2px 0">${c.factor < 0 ? '−' : '+'} ${esc(entityName(c.entityId))} <a href="#" onclick="rmComponent(${i});return false">entfernen</a></div>`)
         .join('')
     : '<div class="mini">Noch keine Komponenten – Zähler wählen und „+ Komponente".</div>';
 }
@@ -280,20 +283,20 @@ function renderStats(s) {
     s.periods
       .map((p, i) => {
         const h = Math.round((Math.abs(p.euro || 0) / max) * 110);
-        const label = i % step === 0 || i === s.periods.length - 1 ? `<span>${p.label}</span>` : '';
-        return `<div class="bar ${p.euro < 0 ? 'neg' : ''}" style="height:${h}px" title="${p.label}: ${fmtEur(p.euro)}">${label}</div>`;
+        const label = i % step === 0 || i === s.periods.length - 1 ? `<span>${esc(p.label)}</span>` : '';
+        return `<div class="bar ${p.euro < 0 ? 'neg' : ''}" style="height:${h}px" title="${esc(p.label)}: ${fmtEur(p.euro)}">${label}</div>`;
       })
       .join('') +
     '</div><div class="mini" style="text-align:right">Balken = €-Netto je Periode (rot = Gutschrift)</div>';
 
   const head =
     '<tr><th>Periode</th>' +
-    s.meters.map((m) => `<th class="num">${m.name}<div class="tag">kWh · ${m.source === 'statistics' ? 'HA' : 'Poll'}</div></th>`).join('') +
+    s.meters.map((m) => `<th class="num">${esc(m.name)}<div class="tag">kWh · ${m.source === 'statistics' ? 'HA' : 'Poll'}</div></th>`).join('') +
     '<th class="num">€ netto</th></tr>';
   const rows = s.periods
     .map(
       (p) =>
-        `<tr><td>${p.label}</td>${s.meters.map((m) => `<td class="num">${fmtKwh(p.byMeter[m.id])}</td>`).join('')}<td class="num">${fmtEur(p.euro)}</td></tr>`
+        `<tr><td>${esc(p.label)}</td>${s.meters.map((m) => `<td class="num">${fmtKwh(p.byMeter[m.id])}</td>`).join('')}<td class="num">${fmtEur(p.euro)}</td></tr>`
     )
     .join('');
   const sumEur = s.periods.reduce((a, p) => a + (p.euro || 0), 0);
@@ -346,7 +349,7 @@ async function loadIncidents() {
       `<table><thead><tr><th>Zähler</th><th>seit</th><th>alter Endstand</th><th>aktuell</th><th>Status</th><th></th></tr></thead><tbody>${inc
         .map((i) => {
           const status = i.notifiedFault ? '🔴 Störung (>2h)' : i.notifiedInvestigating ? '🟠 wird untersucht' : '🟡 erkannt';
-          return `<tr><td>${i.name || i.entityId}</td><td>${new Date(i.since).toLocaleString('de-DE')}</td>
+          return `<tr><td>${esc(i.name || i.entityId)}</td><td>${new Date(i.since).toLocaleString('de-DE')}</td>
             <td class="num">${i.oldFinal ?? '–'}</td><td class="num">${i.current ?? '–'}</td><td>${status}</td>
             <td><button onclick="confirmSwap('${i.entityId}','${(i.name || i.entityId).replace(/'/g, '')}')">Zählertausch bestätigen</button></td></tr>`;
         })
@@ -424,21 +427,21 @@ async function loadStatus() {
     const meters = s.meters
       .map((m) => {
         const val = m.lastEffective != null
-          ? m.lastEffective.toLocaleString('de-DE', { maximumFractionDigits: 2 }) + ' ' + (m.unit || 'kWh')
+          ? m.lastEffective.toLocaleString('de-DE', { maximumFractionDigits: 2 }) + ' ' + esc(m.unit || 'kWh')
           : m.polled ? '–' : '<span style="color:#999">noch nicht gelesen</span>';
         const out = !m.polled
           ? '<span style="color:#999">–</span>'
           : m.outages24h > 0
             ? `<span style="color:#dc2626">${m.outages24h}× (zuletzt ${agoText(m.lastOutage, s.at)})</span>`
             : '<span style="color:#16a34a">0 ✓</span>';
-        return `<tr><td>${m.isVirtual ? '∑ ' : ''}${m.name}<div class="tag">${m.entityId}</div></td><td class="num"><b>${val}</b></td><td>${m.polled ? agoText(m.lastTs, s.at) : '–'}</td><td>${out}</td></tr>`;
+        return `<tr><td>${m.isVirtual ? '∑ ' : ''}${esc(m.name)}<div class="tag">${esc(m.entityId)}</div></td><td class="num"><b>${val}</b></td><td>${m.polled ? agoText(m.lastTs, s.at) : '–'}</td><td>${out}</td></tr>`;
       })
       .join('');
     const reports = s.reports
-      .map((r) => `<li>${new Date(r.at).toLocaleString('de-DE')} – ${r.periodType} ${r.periodLabel}: ${r.total} € ${r.sent ? '✉️' : ''} ${r.error ? '⚠ ' + r.error : ''}</li>`)
+      .map((r) => `<li>${new Date(r.at).toLocaleString('de-DE')} – ${esc(r.periodType)} ${esc(r.periodLabel)}: ${r.total} € ${r.sent ? '✉️' : ''} ${r.error ? '⚠ ' + esc(r.error) : ''}</li>`)
       .join('');
     const bat = s.battery && s.battery.value != null
-      ? `<div style="margin:8px 0;font-size:14px">🔋 Akku-Ladestand: <b>${s.battery.value}${s.battery.unit || '%'}</b> <span class="tag">(${agoText(s.battery.ts, s.at)})</span></div>`
+      ? `<div style="margin:8px 0;font-size:14px">🔋 Akku-Ladestand: <b>${s.battery.value}${esc(s.battery.unit || '%')}</b> <span class="tag">(${agoText(s.battery.ts, s.at)})</span></div>`
       : '';
     $('status').innerHTML =
       bat +

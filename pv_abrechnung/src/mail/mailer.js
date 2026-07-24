@@ -34,9 +34,11 @@ async function sendReport(config, { subject, html, csv, csvName }) {
   return { messageId: info.messageId, accepted: info.accepted, rejected: info.rejected };
 }
 
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
 function alertContent(alert) {
   const when = new Date(alert.since).toLocaleString('de-DE');
-  const who = alert.name || alert.entityId;
+  const who = esc(alert.name || alert.entityId);
   if (alert.kind === 'offline_investigating') {
     return {
       subject: `PV-Abrechnung – Sensor ausgefallen: ${who}`,
