@@ -2,6 +2,7 @@
 
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const { loadConfig, saveConfig } = require('../config');
 const haClient = require('../ha/haClient');
 const { loadSnapshots, saveSnapshots, openIncidents, applySwap } = require('../meter/meterService');
@@ -145,7 +146,17 @@ function createServer() {
     }
   });
 
-  app.use(express.static(path.join(__dirname, '..', '..', 'public')));
+  // index.html immer frisch ausliefern und app.js mit Versions-Query cache-busten,
+  // damit nach einem Update garantiert die neue Oberfläche geladen wird.
+  const publicDir = path.join(__dirname, '..', '..', 'public');
+  const version = process.env.APP_VERSION || 'dev';
+  app.get(['/', '/index.html'], (req, res) => {
+    let html = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf8');
+    html = html.replace(/(src|href)="((?:app|style)[^"?]*)"/g, `$1="$2?v=${encodeURIComponent(version)}"`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.type('html').send(html);
+  });
+  app.use(express.static(publicDir, { setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
   return app;
 }
 

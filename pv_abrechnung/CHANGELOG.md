@@ -2,6 +2,14 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.11 – 2026-07-24
+
+### Behoben (Browser-Cache)
+- **Keine veraltete Oberfläche mehr nach Updates.** `index.html` wird ohne Cache ausgeliefert und
+  `app.js` bekommt eine Versions-Query (`app.js?v=<version>`) – dadurch lädt der Browser nach
+  jedem Update garantiert die neue Oberfläche, ohne manuelles hartes Neuladen. Statische Dateien
+  werden mit `Cache-Control: no-cache` (immer revalidieren) ausgeliefert.
+
 ## 0.1.10 – 2026-07-24
 
 - **Versionsnummer wird oben rechts in der Oberfläche angezeigt** – so ist sofort erkennbar,
