@@ -1,5 +1,8 @@
-ARG BUILD_FROM=node:20-alpine
+ARG BUILD_FROM=ghcr.io/home-assistant/base:latest
 FROM ${BUILD_FROM}
+
+# Die HA-Base ist Alpine-basiert und bringt kein Node mit -> Node.js + npm nachinstallieren.
+RUN apk add --no-cache nodejs npm
 
 WORKDIR /app
 

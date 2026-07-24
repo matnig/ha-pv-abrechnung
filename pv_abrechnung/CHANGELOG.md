@@ -2,6 +2,13 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.1 – 2026-07-24
+
+### Behoben
+- **Build-Fehler „npm: not found"**: Die HA-Base-Images bringen kein Node mit; Node.js + npm
+  werden jetzt im Dockerfile per `apk` installiert. Die (bei aktuellen Supervisor-Versionen
+  deprecatete und für Docker-Hub-Images ungültige) `build.yaml` wurde entfernt.
+
 ## 0.1.0 – 2026-07-24
 
 Erste Version.
