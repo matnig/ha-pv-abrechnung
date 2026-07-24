@@ -144,5 +144,5 @@ Mit der Nutzung erkennst du diesen Haftungsausschluss an. Es gilt die MIT-Lizenz
 
 ## Lizenz
 
-MIT – siehe [`pv_abrechnung/package.json`](pv_abrechnung/package.json). Die Software wird ohne
-Gewährleistung und ohne Haftung im gesetzlich zulässigen Umfang bereitgestellt.
+MIT – siehe [`LICENSE`](LICENSE). Die Software wird ohne Gewährleistung und ohne Haftung im
+gesetzlich zulässigen Umfang bereitgestellt.
