@@ -41,8 +41,8 @@ test('Tagesreihe aus Statistics inkl. €-Netto je Tag', async () => {
   assert.strictEqual(s.periods.length, 3);
   assert.strictEqual(s.totalsByMeter.m1, 30);
   assert.strictEqual(s.totalsByMeter.m2, 15);
-  // heutiger Tag: 8 kWh * 0.35 - 4 kWh * 0.08 = 2.8 - 0.32 = 2.48
-  assert.strictEqual(s.periods[2].euro, 2.48);
+  // Einspeisung zählt in der Direktansicht nicht (Vorzeichen 0): 8 kWh * 0.35 = 2.8
+  assert.strictEqual(s.periods[2].euro, 2.8);
   assert.strictEqual(s.meters[0].source, 'statistics');
 });
 

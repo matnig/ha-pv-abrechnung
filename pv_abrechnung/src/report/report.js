@@ -25,12 +25,53 @@ const ANOMALY_TEXT = {
 function subject(billing) {
   const p = billing.period;
   const label = { day: 'Tagesbericht', month: 'Monatsbericht', year: 'Jahresbericht' }[p.type] || 'Bericht';
-  return `PV-Abrechnung – ${label} ${p.label}`;
+  const incomplete = p.end.getTime() > (billing.generatedAt || Date.now());
+  return `PV-Abrechnung – ${label} ${p.label}${incomplete ? ' (nicht abgeschlossen)' : ''}`;
+}
+
+function monthlyPrimaryKwh(m) {
+  const k = m.kwhByRole || {};
+  if (k.lieferung != null) return k.lieferung;
+  if (k.verbrauch != null) return k.verbrauch;
+  return Object.values(k).reduce((s, v) => s + v, 0);
+}
+
+function buildMonthlyBreakdown(billing) {
+  const months = billing.monthly || [];
+  if (!months.length) return '';
+  const anyEuro = months.some((m) => Math.abs(m.total) > 0.005);
+  const barVal = (m) => (anyEuro ? Math.abs(m.total) : monthlyPrimaryKwh(m));
+  const max = Math.max(1, ...months.map(barVal));
+  const rows = months
+    .map((m) => {
+      const w = Math.round((barVal(m) / max) * 100);
+      return `<tr>
+        <td style="padding:4px 8px">${esc(m.label)}${m.incomplete ? ' <span style="color:#dc2626;font-size:11px">(läuft)</span>' : ''}</td>
+        <td style="padding:4px 8px;text-align:right">${kwh(monthlyPrimaryKwh(m))}</td>
+        <td style="padding:4px 8px;text-align:right">${eur(m.total)}</td>
+        <td style="padding:4px 8px;width:38%"><div style="background:#eef2ff;border-radius:3px"><div style="background:#2563eb;width:${w}%;height:12px;border-radius:3px"></div></div></td>
+      </tr>`;
+    })
+    .join('');
+  return `<h3 style="margin-top:24px">Monatsübersicht</h3>
+    <table style="border-collapse:collapse;width:100%;font-size:13px">
+      <thead><tr style="background:#f3f4f6;text-align:left"><th style="padding:4px 8px">Monat</th><th style="text-align:right">geliefert/Menge</th><th style="text-align:right">Summe</th><th>Verlauf (${anyEuro ? '€' : 'kWh'})</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
 }
 
 function buildHtml(billing) {
   const p = billing.period;
   const t = billing.totals;
+  const incomplete = p.end.getTime() > (billing.generatedAt || Date.now());
+  const periodWord = { day: 'Tag', month: 'Monat', year: 'Jahr' }[p.type] || 'Zeitraum';
+  const incompleteBanner = incomplete
+    ? `<div style="background:#fee2e2;border:2px solid #dc2626;border-radius:8px;padding:12px;margin:12px 0;text-align:center">
+         <div style="color:#dc2626;font-size:22px;font-weight:800">⚠ ${periodWord} nicht abgeschlossen</div>
+         <div style="color:#7f1d1d;font-size:13px;margin-top:4px">Vorläufige Werte, Stand ${fmt(new Date(billing.generatedAt))} – der ${periodWord} läuft noch.</div>
+       </div>`
+    : '';
+  const monthlyHtml = buildMonthlyBreakdown(billing);
 
   const rows = billing.lines
     .map((l) => {
@@ -39,7 +80,9 @@ function buildHtml(billing) {
         : '';
       const src = l.source === 'statistics' ? 'HA-Statistik' : l.source === 'poll' ? 'Polling' : l.source === 'virtual' ? 'virtuell' : '–';
       return `<tr>
-        <td>${esc(l.name)}<div style="color:#888;font-size:11px">${esc(l.entityId)} · Quelle: ${src}</div>${warn}</td>
+        <td>${esc(l.name)}<div style="color:#888;font-size:11px">${esc(l.entityId)} · Quelle: ${src}</div>${
+          l.hinweis ? `<div style="color:#2563eb;font-size:11px">${esc(l.hinweis)}</div>` : ''
+        }${warn}</td>
         <td>${esc(l.roleLabel)}</td>
         <td style="text-align:right">${kwh(l.anfang)}</td>
         <td style="text-align:right">${kwh(l.ende)}</td>
@@ -83,10 +126,11 @@ function buildHtml(billing) {
 
   return `<!doctype html><html><body style="font-family:system-ui,Arial,sans-serif;color:#222;max-width:820px">
     <h2 style="margin-bottom:2px">PV-Abrechnung</h2>
+    ${incompleteBanner}
     ${banner}
-    <div style="color:#666">${{ day: 'Tag', month: 'Monat', year: 'Jahr' }[p.type] || 'Zeitraum'}: <b>${esc(
-      p.label
-    )}</b> &nbsp;(${fmt(p.start)} – ${fmt(new Date(p.end.getTime() - 1))})</div>
+    <div style="color:#666">${periodWord}: <b>${esc(p.label)}</b> &nbsp;(${fmt(p.start)} – ${fmt(
+      new Date(p.end.getTime() - 1)
+    )})${incomplete ? ' <span style="color:#dc2626;font-weight:600">· vorläufig, nicht abgeschlossen</span>' : ''}</div>
     <table style="border-collapse:collapse;width:100%;margin-top:16px;font-size:14px">
       <thead><tr style="background:#f3f4f6;text-align:left">
         <th style="padding:6px">Zähler</th><th>Rolle</th>
@@ -97,10 +141,12 @@ function buildHtml(billing) {
     </table>
     <table style="margin-top:16px;font-size:15px">
       ${t.grundgebuehr ? `<tr><td>Grundgebühr</td><td style="text-align:right;padding-left:24px">${eur(t.grundgebuehr)}</td></tr>` : ''}
+      ${t.einspeiseManagement ? `<tr><td>Einspeisemanagement (anteilig, dem Betreiber abgezogen)</td><td style="text-align:right;padding-left:24px">−${eur(t.einspeiseManagement)}</td></tr>` : ''}
       <tr><td style="font-size:17px"><b>Summe</b></td><td style="text-align:right;padding-left:24px;font-size:17px"><b>${eur(
         t.total
       )}</b></td></tr>
     </table>
+    ${monthlyHtml}
     ${anomalyRows}
     <p style="color:#aaa;font-size:11px;margin-top:24px">Erstellt am ${new Date(
       billing.generatedAt
@@ -108,16 +154,38 @@ function buildHtml(billing) {
   </body></html>`;
 }
 
+function csvCell(v) {
+  return `"${String(v).replace(/"/g, '""')}"`;
+}
+
 function buildCsv(billing) {
+  const p = billing.period;
+  const incomplete = p.end.getTime() > (billing.generatedAt || Date.now());
+  const out = [];
+  out.push(csvCell('Zeitraum') + ';' + csvCell(`${p.type} ${p.label}`));
+  out.push(csvCell('Status') + ';' + csvCell(incomplete ? 'NICHT ABGESCHLOSSEN (vorläufig)' : 'abgeschlossen'));
+  out.push('');
+
   const head = ['Zaehler', 'EntityId', 'Rolle', 'Anfangsstand_kWh', 'Endstand_kWh', 'Menge_kWh', 'Tarif_EUR_kWh', 'Betrag_EUR', 'Warnungen'];
-  const rows = billing.lines.map((l) =>
-    [l.name, l.entityId, l.role, l.anfang ?? '', l.ende ?? '', l.kwh ?? '', l.tariff ?? '', l.amount ?? '', l.warnings.join(' | ')]
-      .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-      .join(';')
-  );
-  rows.push('');
-  rows.push(`"Summe";;;;;;;"${billing.totals.total}";`);
-  return [head.join(';'), ...rows].join('\r\n');
+  out.push(head.join(';'));
+  for (const l of billing.lines) {
+    out.push(
+      [l.name, l.entityId, l.role, l.anfang ?? '', l.ende ?? '', l.kwh ?? '', l.tariff ?? '', l.amount ?? '', l.warnings.join(' | ')].map(csvCell).join(';')
+    );
+  }
+  if (billing.totals.einspeiseManagement) out.push(`"Einspeisemanagement (anteilig)";;;;;;;"-${billing.totals.einspeiseManagement}";`);
+  out.push(`"Summe";;;;;;;"${billing.totals.total}";`);
+
+  // Jahresbericht: Monatsübersicht anhängen
+  if (billing.monthly && billing.monthly.length) {
+    out.push('');
+    out.push(csvCell('Monatsübersicht'));
+    out.push(['Monat', 'Status', 'Menge_kWh', 'Summe_EUR'].join(';'));
+    for (const m of billing.monthly) {
+      out.push([m.label, m.incomplete ? 'läuft' : 'abgeschlossen', monthlyPrimaryKwh(m), m.total].map(csvCell).join(';'));
+    }
+  }
+  return out.join('\r\n');
 }
 
 module.exports = { buildHtml, buildCsv, subject };

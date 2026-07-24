@@ -2,6 +2,22 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.15 – 2026-07-24
+
+### Einspeisevergütung: zwei Fälle konfigurierbar
+- Neue Option **„Anlagenbetreiber erhält die Einspeisevergütung vom Netz"** (Tarife):
+  - **Fall 1 (angehakt):** Einspeisung wird in der Kundenrechnung ignoriert (nur Info).
+  - **Fall 2 (nicht angehakt):** Dem Kunden wird die Einspeisemenge mit dem Einspeisung-€/kWh-Satz
+    berechnet (er zahlt mehr); zusätzlich wird die **Einspeisemanagement-Gebühr** (neu, €/Jahr)
+    anteilig pro Periode dem Betreiber abgezogen.
+- Ausführliche Erklärtexte an allen Feldern.
+
+### Berichte
+- **„… nicht abgeschlossen"**: Wird ein Bericht für den laufenden Monat/Jahr/Tag erzeugt, steht
+  im Betreff, groß in **roter Schrift** oben und im CSV-Status ein deutlicher Hinweis samt Datum.
+- **Jahresbericht mit Monatsübersicht:** alle bereits begonnenen Monate mit Menge, Summe und
+  **Balken-Verlauf** (auch in der CSV).
+
 ## 0.1.14 – 2026-07-24
 
 ### Bericht: frühester Stand + Jahresbericht + glitch-sicher

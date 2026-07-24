@@ -19,13 +19,13 @@ const resolved = {
   m2: { meterId: 'm2', name: 'Einspeisung', entityId: 'sensor.feed', role: 'einspeisung', kwh: 150, anfang: 500, ende: 650, source: 'statistics', warnings: [] },
 };
 
-test('Tarife: Kosten, Einspeisungs-Gutschrift und Grundgebühr', () => {
+test('Standard (Fall 1): Verbrauch berechnet, Einspeisung ignoriert, Grundgebühr', () => {
   const b = computeBilling(config, resolved, monthPeriod(2026, 6));
   const w1 = b.lines.find((l) => l.entityId === 'sensor.w1');
   const feed = b.lines.find((l) => l.entityId === 'sensor.feed');
   assert.strictEqual(w1.amount, 70); // 200 * 0.35
-  assert.strictEqual(feed.amount, -12); // -(150 * 0.08)
-  assert.strictEqual(b.totals.total, 63); // 70 - 12 + 5
+  assert.strictEqual(feed.amount, 0); // Einspeisung geht standardmäßig an Betreiber -> ignoriert
+  assert.strictEqual(b.totals.total, 75); // 70 + 5 (keine Einspeisungs-Verrechnung)
 });
 
 test('fehlende aufgelöste Werte -> kein Absturz, Betrag 0', () => {
@@ -33,6 +33,35 @@ test('fehlende aufgelöste Werte -> kein Absturz, Betrag 0', () => {
   assert.strictEqual(b.lines.length, 2);
   assert.strictEqual(b.totals.total, 5); // nur Grundgebühr
   assert.ok(b.lines[0].warnings.length > 0);
+});
+
+test('Fall 1: Betreiber bekommt Einspeisevergütung -> Einspeisung wird ignoriert', () => {
+  const cfg = {
+    meters: [{ id: 'feed', name: 'Einsp', entityId: 'sensor.feed', role: 'einspeisung' }],
+    virtualMeters: [{ id: 'v', name: 'Geliefert', role: 'lieferung' }],
+    tariffs: { einspeisung: 0.08, lieferung: 0.3, einspeisungAnBetreiber: true },
+  };
+  const res = { feed: { meterId: 'feed', role: 'einspeisung', kwh: 100, warnings: [] }, v: { meterId: 'v', role: 'lieferung', kwh: 200, warnings: [] } };
+  const b = computeBilling(cfg, res, monthPeriod(2026, 6));
+  const feed = b.lines.find((l) => l.meterId === 'feed');
+  assert.strictEqual(feed.amount, 0); // ignoriert
+  assert.match(feed.hinweis, /Anlagenbetreiber/);
+  assert.strictEqual(b.totals.total, 60); // nur Lieferung 200*0.30
+  assert.strictEqual(b.totals.einspeiseManagement, 0);
+});
+
+test('Fall 2: Kunde bekommt Vergütung -> Einspeisung berechnet + Managementgebühr abgezogen', () => {
+  const cfg = {
+    meters: [{ id: 'feed', name: 'Einsp', entityId: 'sensor.feed', role: 'einspeisung' }],
+    virtualMeters: [{ id: 'v', name: 'Geliefert', role: 'lieferung' }],
+    tariffs: { einspeisung: 0.08, lieferung: 0.3, einspeisungAnBetreiber: false, einspeiseManagementJahr: 120 },
+  };
+  const res = { feed: { meterId: 'feed', role: 'einspeisung', kwh: 100, warnings: [] }, v: { meterId: 'v', role: 'lieferung', kwh: 200, warnings: [] } };
+  const b = computeBilling(cfg, res, monthPeriod(2026, 6)); // Monat -> 1/12
+  const feed = b.lines.find((l) => l.meterId === 'feed');
+  assert.strictEqual(feed.amount, 8); // 100 * 0.08, Kunde zahlt
+  assert.strictEqual(b.totals.einspeiseManagement, 10); // 120/12
+  assert.strictEqual(b.totals.total, 58); // 60 + 8 - 10
 });
 
 test('erzeugung ist informativ (kein Geldbetrag)', () => {

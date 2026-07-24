@@ -19,8 +19,10 @@ const DEFAULT_CONFIG = {
   tariffs: {
     verbrauch: 0.35, // €/kWh, an Partei verkaufter PV-/Reststrom
     netzbezug: 0.4, // €/kWh Netzbezug
-    einspeisung: 0.08, // €/kWh Einspeisevergütung (Gutschrift)
+    einspeisung: 0.08, // €/kWh Satz für die Einspeisemenge (nur Fall 2 relevant)
     grundgebuehr: 0, // € pauschal pro Abrechnungsperiode
+    einspeisungAnBetreiber: true, // true: Betreiber bekommt Einspeisevergütung -> in Rechnung ignoriert
+    einspeiseManagementJahr: 0, // €/Jahr Einspeisemanagement-Gebühr (nur Fall 2, anteilig abgezogen)
   },
   recipients: [], // Empfänger der Abrechnungs-Reports
   alertRecipients: [], // Empfänger der Störungs-/Untersuchungsmails (leer -> wie recipients)

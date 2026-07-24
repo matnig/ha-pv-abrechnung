@@ -168,6 +168,8 @@ function fillForm() {
   $('tVerbrauch').value = t.verbrauch; $('tNetzbezug').value = t.netzbezug;
   $('tEinspeisung').value = t.einspeisung; $('tGrund').value = t.grundgebuehr;
   $('tLieferung').value = t.lieferung ?? 0;
+  $('tEinspBetreiber').checked = t.einspeisungAnBetreiber !== false;
+  $('tEinspMgmt').value = t.einspeiseManagementJahr ?? 0;
   $('recipients').value = (config.recipients || []).join(', ');
   $('alertRecipients').value = (config.alertRecipients || []).join(', ');
   $('sDaily').value = String(!!s.daily); $('sMonthly').value = String(!!s.monthly);
@@ -185,6 +187,8 @@ function collectForm() {
     verbrauch: +$('tVerbrauch').value, netzbezug: +$('tNetzbezug').value,
     einspeisung: +$('tEinspeisung').value, grundgebuehr: +$('tGrund').value,
     lieferung: +$('tLieferung').value,
+    einspeisungAnBetreiber: $('tEinspBetreiber').checked,
+    einspeiseManagementJahr: +$('tEinspMgmt').value,
   };
   config.recipients = $('recipients').value.split(',').map((x) => x.trim()).filter(Boolean);
   config.alertRecipients = $('alertRecipients').value.split(',').map((x) => x.trim()).filter(Boolean);

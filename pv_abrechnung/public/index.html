@@ -113,11 +113,36 @@
       </div>
       <div>
         <label>Einspeisung €/kWh</label><input id="tEinspeisung" type="number" step="0.001" />
-        <div class="hint">Vergütung je ins Netz eingespeister kWh – wird als Gutschrift abgezogen.</div>
+        <div class="hint">Satz je ins Netz eingespeister kWh. <b>Nur relevant, wenn der Kunde die Vergütung bekommt</b> (siehe unten): dann zahlt der Kunde dir diesen Satz je eingespeister kWh.</div>
       </div>
       <div>
         <label>Grundgebühr €/Periode</label><input id="tGrund" type="number" step="0.01" />
         <div class="hint">Fester Betrag je Abrechnungszeitraum (z.B. Zähler-/Verwaltungspauschale).</div>
+      </div>
+    </div>
+
+    <div class="legend" style="margin-top:14px">
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--text)">
+        <input type="checkbox" id="tEinspBetreiber" style="width:auto;margin-top:2px" />
+        <span><b>Anlagenbetreiber erhält die Einspeisevergütung vom Netz</b></span>
+      </label>
+      <div class="hint" style="margin-top:6px">
+        <b>Angehakt (Fall 1 – du bekommst die Vergütung):</b> Die ins Netz eingespeiste Menge wird in der
+        Kundenrechnung <b>ignoriert</b> (nur als Info angezeigt, kein Betrag). Die Einspeisevergütung ist dein
+        Einkommen vom Netzbetreiber und steht nicht auf der Kundenrechnung.<br />
+        <b>Nicht angehakt (Fall 2 – der Kunde bekommt die Vergütung):</b> Dem Kunden wird die eingespeiste Menge
+        mit dem oben eingegebenen <b>Einspeisung-€/kWh-Satz berechnet</b> – er zahlt also entsprechend <b>mehr</b>
+        (weil er die Vergütung vom Netzbetreiber kassiert). Zusätzlich wird die Einspeisemanagement-Gebühr
+        (siehe rechts) anteilig pro Periode <b>dir als Betreiber abgezogen</b>.
+      </div>
+      <div style="margin-top:10px;max-width:320px">
+        <label>Einspeisemanagement-Gebühr €/Jahr</label>
+        <input id="tEinspMgmt" type="number" step="0.01" />
+        <div class="hint">
+          Jährliche Gebühr fürs Einspeisemanagement (z.B. Direktvermarkter / fernsteuerbare technische Einrichtung).
+          Wird <b>nur im Fall 2</b> anteilig auf die Abrechnungsperiode umgelegt und dir abgezogen
+          (Monatsbericht = 1/12, Jahresbericht = voll, Tagesbericht = 1/365). Im Fall 1 ohne Wirkung.
+        </div>
       </div>
     </div>
   </div>

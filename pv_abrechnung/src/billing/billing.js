@@ -2,9 +2,16 @@
 
 const { round2 } = require('./resolver');
 
-// Vorzeichen je Rolle: Verbrauch/Netzbezug = Kosten (+), Einspeisung = Gutschrift (−),
-// Erzeugung = rein informativ (kein Geldbetrag).
-const ROLE_SIGN = { verbrauch: 1, netzbezug: 1, lieferung: 1, einspeisung: -1, erzeugung: 0 };
+// Vorzeichen je Rolle: Verbrauch/Netzbezug/Lieferung = Kosten (+), Erzeugung = rein informativ.
+// Einspeisung wird dynamisch behandelt (siehe unten), abhängig davon, wer die Vergütung bekommt.
+const ROLE_SIGN = { verbrauch: 1, netzbezug: 1, lieferung: 1, einspeisung: 0, erzeugung: 0 };
+
+// Jahresgebühr anteilig auf die Abrechnungsperiode umlegen.
+function periodFactor(type) {
+  if (type === 'year') return 1;
+  if (type === 'day') return 1 / 365;
+  return 1 / 12; // Monat (Standard)
+}
 
 /**
  * Reine Abrechnungsfunktion: nimmt bereits aufgelöste Periodenwerte (resolver)
@@ -35,7 +42,19 @@ function computeBilling(config, resolved, period, snapshots = {}) {
       warnings: ['keine Daten'],
     };
 
-    const sign = ROLE_SIGN[meter.role] ?? 0;
+    let sign = ROLE_SIGN[meter.role] ?? 0;
+    let hinweis = null;
+    if (meter.role === 'einspeisung') {
+      if (tariffs.einspeisungAnBetreiber !== false) {
+        // Fall 1: Anlagenbetreiber bekommt die Einspeisevergütung -> nicht in Kundenrechnung
+        sign = 0;
+        hinweis = 'Vergütung geht an Anlagenbetreiber – nicht berechnet';
+      } else {
+        // Fall 2: Kunde bekommt die Vergütung -> Einspeisemenge wird ihm berechnet (zahlt mehr)
+        sign = 1;
+        hinweis = 'Kunde erhält Vergütung – Einspeisemenge berechnet';
+      }
+    }
     const tariff = sign === 0 ? 0 : Number(tariffs[meter.role] || 0);
     const amount = r.kwh != null && sign !== 0 ? round2(sign * r.kwh * tariff) : 0;
 
@@ -44,11 +63,19 @@ function computeBilling(config, resolved, period, snapshots = {}) {
       amountByRole[meter.role] = round2((amountByRole[meter.role] || 0) + amount);
     }
 
-    lines.push({ ...r, tariff, amount });
+    lines.push({ ...r, tariff, amount, hinweis });
   }
 
   const grundgebuehr = Number(tariffs.grundgebuehr || 0);
-  const total = round2(Object.values(amountByRole).reduce((s, v) => s + v, 0) + grundgebuehr);
+  // Einspeisemanagement-Gebühr nur im Fall 2 (Kunde bekommt Vergütung), anteilig pro Periode,
+  // dem Anlagenbetreiber abgezogen.
+  let einspeiseManagement = 0;
+  if (tariffs.einspeisungAnBetreiber === false && Number(tariffs.einspeiseManagementJahr) > 0) {
+    einspeiseManagement = round2(Number(tariffs.einspeiseManagementJahr) * periodFactor(period.type));
+  }
+  const total = round2(
+    Object.values(amountByRole).reduce((s, v) => s + v, 0) + grundgebuehr - einspeiseManagement
+  );
 
   // Anomalien im Zeitraum (aus den Polling-Snapshots)
   const startMs = period.start.getTime();
@@ -65,7 +92,7 @@ function computeBilling(config, resolved, period, snapshots = {}) {
     period,
     generatedAt: Date.now(),
     lines,
-    totals: { kwhByRole, amountByRole, grundgebuehr, total },
+    totals: { kwhByRole, amountByRole, grundgebuehr, einspeiseManagement, total },
     anomalies,
   };
 }

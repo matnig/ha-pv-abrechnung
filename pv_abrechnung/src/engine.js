@@ -5,6 +5,7 @@ const { loadSnapshots, pollOnce, commitAlert } = require('./meter/meterService')
 const { sendAlert } = require('./mail/mailer');
 const { computeBilling } = require('./billing/billing');
 const { resolvePeriodReadings } = require('./billing/resolver');
+const { monthPeriod } = require('./billing/periods');
 const { buildHtml, buildCsv, subject } = require('./report/report');
 const { sendReport } = require('./mail/mailer');
 const { readJson, writeJson } = require('./store/store');
@@ -25,6 +26,27 @@ async function runReport(period, opts = {}) {
   const snapshots = loadSnapshots();
   const resolved = await resolvePeriodReadings(config, snapshots, period);
   const billing = computeBilling(config, resolved, period, snapshots);
+
+  // Jahresbericht: Monatsübersicht aller bereits begonnenen Monate ergänzen.
+  if (period.type === 'year') {
+    const year = period.start.getFullYear();
+    const now = Date.now();
+    billing.monthly = [];
+    for (let m = 0; m < 12; m++) {
+      const mp = monthPeriod(year, m);
+      if (mp.start.getTime() > now) break; // Monat noch nicht begonnen
+      const rr = await resolvePeriodReadings(config, snapshots, mp);
+      const mb = computeBilling(config, rr, mp, snapshots);
+      billing.monthly.push({
+        label: mp.label,
+        incomplete: mp.end.getTime() > now,
+        total: mb.totals.total,
+        kwhByRole: mb.totals.kwhByRole,
+        amountByRole: mb.totals.amountByRole,
+      });
+    }
+  }
+
   const html = buildHtml(billing);
   const csv = buildCsv(billing);
   const subj = subject(billing);
