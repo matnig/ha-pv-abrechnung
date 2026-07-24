@@ -227,12 +227,21 @@
       <div style="max-width:150px"><button class="sec" onclick="preview()">Vorschau</button></div>
       <div style="max-width:170px"><button onclick="sendNow()">Jetzt versenden</button></div>
     </div>
+    <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text);margin-top:8px">
+      <input type="checkbox" id="forceRecompute" style="width:auto" /> Neu berechnen (Korrektur) – ignoriert einen bereits abgeschlossenen Beleg und erstellt einen neuen Korrektur-Beleg</label>
+    <div class="hint">Normalerweise wird eine bereits versendete (abgeschlossene) Periode <b>eingefroren</b> und nicht neu aus der Statistik gerechnet – so sind nachträgliche Manipulationen der Statistik wirkungslos.</div>
     <div id="previewWrap" style="margin-top:12px;display:none"><iframe id="preview"></iframe></div>
   </div>
 
   <div class="card">
     <h2>Status</h2>
     <div id="status" class="mini">–</div>
+  </div>
+
+  <div class="card">
+    <h2>Rechnungsjournal (manipulationssicher)</h2>
+    <p class="mini">Jeder versendete Bericht wird als Beleg mit Prüfsumme gespeichert (Hash-Kette). Wird ein alter Beleg nachträglich verändert, bricht die Kette und es wird hier angezeigt.</p>
+    <div id="ledger" class="mini">–</div>
   </div>
 </main>
 

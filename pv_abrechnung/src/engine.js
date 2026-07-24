@@ -5,6 +5,7 @@ const { loadSnapshots, pollOnce, commitAlert } = require('./meter/meterService')
 const { sendAlert } = require('./mail/mailer');
 const { computeBilling } = require('./billing/billing');
 const { resolvePeriodReadings } = require('./billing/resolver');
+const ledger = require('./billing/ledger');
 const { monthPeriod } = require('./billing/periods');
 const { buildHtml, buildCsv, subject } = require('./report/report');
 const { sendReport } = require('./mail/mailer');
@@ -21,35 +22,60 @@ function logReport(record) {
  * @param {object} period  aus billing/periods
  * @param {{send?:boolean, config?:object}} [opts]
  */
+// Rekonstruiert ein billing-Objekt aus einem eingefrorenen Journal-Beleg (keine Neuberechnung).
+function ledgerToBilling(e) {
+  return {
+    period: { type: e.periodType, label: e.periodLabel, start: new Date(e.start), end: new Date(e.end) },
+    generatedAt: e.at,
+    lines: (e.lines || []).map((l) => ({ ...l, source: 'beleg', warnings: [] })),
+    totals: e.totals,
+    anomalies: [],
+    monthly: e.monthly || undefined,
+  };
+}
+
 async function runReport(period, opts = {}) {
   const config = opts.config || loadConfig();
-  const snapshots = loadSnapshots();
-  const resolved = await resolvePeriodReadings(config, snapshots, period);
-  const billing = computeBilling(config, resolved, period, snapshots);
 
-  // Jahresbericht: Monatsübersicht aller bereits begonnenen Monate ergänzen.
-  if (period.type === 'year') {
-    const year = period.start.getFullYear();
-    const now = Date.now();
-    billing.monthly = [];
-    for (let m = 0; m < 12; m++) {
-      const mp = monthPeriod(year, m);
-      if (mp.start.getTime() > now) break; // Monat noch nicht begonnen
-      const rr = await resolvePeriodReadings(config, snapshots, mp);
-      const mb = computeBilling(config, rr, mp, snapshots);
-      billing.monthly.push({
-        label: mp.label,
-        incomplete: mp.end.getTime() > now,
-        total: mb.totals.total,
-        kwhByRole: mb.totals.kwhByRole,
-        amountByRole: mb.totals.amountByRole,
-      });
+  // Bereits abgeschlossene Periode -> eingefrorenen Beleg verwenden (KEINE Neuberechnung aus der
+  // ggf. veränderten Statistik). Nur mit forceRecompute=true wird bewusst neu gerechnet (Korrektur).
+  const finalized = !opts.forceRecompute ? ledger.findFinalized(period.type, period.label) : null;
+  let billing;
+  if (finalized) {
+    billing = ledgerToBilling(finalized);
+    billing.finalized = { seq: finalized.seq, at: finalized.at, hash: finalized.hash, correction: false };
+  } else {
+    const snapshots = loadSnapshots();
+    const resolved = await resolvePeriodReadings(config, snapshots, period);
+    billing = computeBilling(config, resolved, period, snapshots);
+
+    // Jahresbericht: Monatsübersicht aller bereits begonnenen Monate ergänzen.
+    if (period.type === 'year') {
+      const year = period.start.getFullYear();
+      const now = Date.now();
+      billing.monthly = [];
+      for (let m = 0; m < 12; m++) {
+        const mp = monthPeriod(year, m);
+        if (mp.start.getTime() > now) break;
+        const rr = await resolvePeriodReadings(config, snapshots, mp);
+        const mb = computeBilling(config, rr, mp, snapshots);
+        billing.monthly.push({ label: mp.label, incomplete: mp.end.getTime() > now, total: mb.totals.total, kwhByRole: mb.totals.kwhByRole, amountByRole: mb.totals.amountByRole });
+      }
     }
   }
 
   billing.footer = (config.reportFooter || '').trim();
   billing.tariffs = config.tariffs || {};
   billing.showInfoStats = config.showInfoStats !== false;
+
+  // Beim Versand einer noch nicht abgeschlossenen Periode: Beleg vorbereiten (Prüfsumme steht dann
+  // schon in der Mail); nach erfolgreichem Versand wird er ins Journal geschrieben.
+  let pendingEntry = null;
+  if (opts.send && !finalized) {
+    pendingEntry = ledger.buildEntry(billing, config, { correction: !!opts.forceRecompute, recipients: config.recipients });
+    billing.finalized = { seq: pendingEntry.seq, at: pendingEntry.at, hash: pendingEntry.hash, correction: !!opts.forceRecompute };
+  }
+
   const html = buildHtml(billing);
   const csv = buildCsv(billing);
   const subj = subject(billing);
@@ -70,6 +96,10 @@ async function runReport(period, opts = {}) {
       mail = await sendReport(config, { subject: subj, html, csv, csvName });
       record.sent = true;
       record.recipients = config.recipients;
+      if (pendingEntry) {
+        const committed = ledger.commit(pendingEntry); // erst nach erfolgreichem Versand einfrieren
+        record.beleg = committed.seq;
+      }
     } catch (err) {
       record.error = String(err.message || err);
       logReport(record);

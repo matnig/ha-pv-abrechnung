@@ -220,6 +220,15 @@ function buildHtml(billing) {
           ).replace(/\n/g, '<br>')}</div>`
         : ''
     }
+    ${
+      billing.finalized
+        ? `<div style="margin-top:16px;font-size:12px;color:#555;border-top:1px solid #e5e7eb;padding-top:8px">
+             <b>Beleg-Nr. ${billing.finalized.seq}${billing.finalized.correction ? ' (Korrektur)' : ''}</b> ·
+             Prüfsumme ${esc(String(billing.finalized.hash).slice(0, 16))} · abgeschlossen am ${new Date(billing.finalized.at).toLocaleString('de-DE')}
+             <div style="color:#888;margin-top:2px">Verbindlicher Beleg im manipulationssicheren Journal – die Werte werden nicht nachträglich aus der Statistik verändert.</div>
+           </div>`
+        : ''
+    }
     <p style="color:#aaa;font-size:11px;margin-top:16px">Erstellt am ${new Date(
       billing.generatedAt
     ).toLocaleString('de-DE')} · Zählerstände sind bereinigte, monoton fortgeführte Werte.</p>

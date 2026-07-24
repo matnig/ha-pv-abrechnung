@@ -8,6 +8,7 @@ const haClient = require('../ha/haClient');
 const { loadSnapshots, saveSnapshots, openIncidents, applySwap } = require('../meter/meterService');
 const { backfillVirtual, earliestCommonDate } = require('../virtual/virtual');
 const { runReport, runPoll } = require('../engine');
+const ledger = require('../billing/ledger');
 const { getSeries } = require('../stats/stats');
 const { verify } = require('../mail/mailer');
 const { readJson } = require('../store/store');
@@ -94,6 +95,21 @@ function createServer() {
 
   app.get('/api/incidents', (req, res) => res.json(openIncidents()));
 
+  // Abrechnungs-Journal: Belege + Integritätsprüfung der Hash-Kette.
+  app.get('/api/ledger', (req, res) => {
+    const entries = ledger.load().map((e) => ({
+      seq: e.seq,
+      at: e.at,
+      periodType: e.periodType,
+      periodLabel: e.periodLabel,
+      total: e.totals && e.totals.total,
+      correction: !!e.correction,
+      recipients: e.recipients || [],
+      hash: e.hash,
+    }));
+    res.json({ verify: ledger.verify(), entries: entries.reverse() });
+  });
+
   // Frühestes gemeinsames Statistik-Datum der Komponenten (für den Startdatum-Picker).
   app.get('/api/virtual/:id/range', async (req, res) => {
     try {
@@ -139,7 +155,7 @@ function createServer() {
 
   app.post('/api/report/preview', async (req, res) => {
     try {
-      const out = await runReport(resolvePeriod(req.body), { send: false });
+      const out = await runReport(resolvePeriod(req.body), { send: false, forceRecompute: !!(req.body && req.body.forceRecompute) });
       res.json({ subject: out.subject, html: out.html, billing: out.billing });
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });
@@ -148,7 +164,7 @@ function createServer() {
 
   app.post('/api/report/send', async (req, res) => {
     try {
-      const out = await runReport(resolvePeriod(req.body), { send: true });
+      const out = await runReport(resolvePeriod(req.body), { send: true, forceRecompute: !!(req.body && req.body.forceRecompute) });
       res.json({ subject: out.subject, mail: out.mail, total: out.billing.totals.total });
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });

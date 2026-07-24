@@ -2,6 +2,19 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.22 – 2026-07-24
+
+### Abrechnungs-Integrität (manipulationssicher)
+- **Einfrieren beim Versand:** Ein versendeter Bericht wird als **Beleg** mit allen Werten
+  gespeichert und danach **nicht mehr aus der (änderbaren) HA-Statistik neu berechnet**. Wer die
+  Statistik-Summen nachträglich anpasst, ändert an einer abgeschlossenen Abrechnung nichts.
+- **Hash-Kette:** Jeder Beleg trägt eine SHA-256-Prüfsumme, die den vorherigen Beleg einbezieht.
+  Wird ein alter Beleg verändert, bricht die Kette – im **Rechnungsjournal** (neu) wird das
+  angezeigt (grün „unversehrt" / rot „Manipulation erkannt").
+- Beleg-Nr. und Prüfsumme stehen in jeder Bericht-Mail.
+- **Korrektur bewusst möglich:** Option „Neu berechnen (Korrektur)" erstellt einen separaten,
+  gekennzeichneten Korrektur-Beleg (der Originalbeleg bleibt erhalten).
+
 ## 0.1.21 – 2026-07-24
 
 - **Netzbezug (und alle echten Zähler) rückwirkend korrekt**: Der Einheiten-Faktor (kWh/Wh/MWh)

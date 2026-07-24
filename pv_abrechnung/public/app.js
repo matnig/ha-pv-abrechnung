@@ -362,18 +362,20 @@ async function confirmSwap(entityId, name) {
 
 function periodBody() {
   const now = new Date();
+  const force = $('forceRecompute') && $('forceRecompute').checked;
+  const base = { forceRecompute: force };
   switch ($('pType').value) {
     case 'cur_month':
-      return { periodType: 'month', year: now.getFullYear(), month: now.getMonth() };
+      return { ...base, periodType: 'month', year: now.getFullYear(), month: now.getMonth() };
     case 'prev_year':
-      return { periodType: 'year' };
+      return { ...base, periodType: 'year' };
     case 'cur_year':
-      return { periodType: 'year', year: now.getFullYear() };
+      return { ...base, periodType: 'year', year: now.getFullYear() };
     case 'yesterday':
-      return { periodType: 'day' };
+      return { ...base, periodType: 'day' };
     case 'prev_month':
     default:
-      return { periodType: 'month' };
+      return { ...base, periodType: 'month' };
   }
 }
 
@@ -393,6 +395,7 @@ async function sendNow() {
     const r = await api('api/report/send', { method: 'POST', body: JSON.stringify(periodBody()) });
     flash(`Versendet (${r.subject}), Summe ${r.total} €.`);
     loadStatus();
+    loadLedger();
   } catch (e) {
     flash('Versand fehlgeschlagen: ' + e.message, false);
   }
@@ -443,6 +446,25 @@ async function loadVersion() {
   }
 }
 
+async function loadLedger() {
+  try {
+    const d = await api('api/ledger');
+    const v = d.verify.ok
+      ? `<span style="color:#16a34a">✓ Journal unversehrt (${d.verify.count} Belege)</span>`
+      : `<span style="color:#dc2626">⚠ Manipulation erkannt bei Beleg #${d.verify.brokenAt}: ${d.verify.reason}</span>`;
+    const rows = d.entries
+      .map((e) => `<tr><td>#${e.seq}${e.correction ? ' (Korr.)' : ''}</td><td>${new Date(e.at).toLocaleString('de-DE')}</td><td>${e.periodType} ${e.periodLabel}</td><td class="num">${fmtEur(e.total)}</td><td class="tag">${(e.hash || '').slice(0, 12)}</td></tr>`)
+      .join('');
+    $('ledger').innerHTML =
+      `<div style="margin-bottom:8px">${v}</div>` +
+      (rows
+        ? `<table><thead><tr><th>Beleg</th><th>erstellt</th><th>Zeitraum</th><th class="num">Summe</th><th>Prüfsumme</th></tr></thead><tbody>${rows}</tbody></table>`
+        : '<span class="mini">Noch keine Belege – beim Versand eines Berichts wird hier ein Beleg eingetragen.</span>');
+  } catch (e) {
+    $('ledger').textContent = 'Journal nicht verfügbar: ' + e.message;
+  }
+}
+
 async function init() {
   loadVersion();
   try {
@@ -451,6 +473,7 @@ async function init() {
     await loadEntities();
     await loadStatus();
     await loadIncidents();
+    await loadLedger();
   } catch (e) {
     flash('Initialisierung fehlgeschlagen: ' + e.message, false);
   }
