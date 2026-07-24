@@ -14,4 +14,8 @@ COPY src ./src
 COPY public ./public
 
 ENV NODE_ENV=production
+# WICHTIG: Die HA-Base nutzt s6-overlay (/init als Entrypoint) und setzt die Umgebung zurück.
+# Ohne dies bekommt der CMD-Prozess KEINE Container-Env – insbesondere fehlt SUPERVISOR_TOKEN,
+# was zu HTTP 401 bei allen HA-API-Aufrufen führt. S6_KEEP_ENV=1 reicht die Umgebung durch.
+ENV S6_KEEP_ENV=1
 CMD ["node", "src/index.js"]

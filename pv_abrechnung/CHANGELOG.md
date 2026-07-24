@@ -2,6 +2,14 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.8 – 2026-07-24
+
+### Behoben (die eigentliche Ursache des 401)
+- **`SUPERVISOR_TOKEN` fehlte komplett in der Add-on-Umgebung** – Ursache: Die HA-Base nutzt
+  s6-overlay (`/init` als Entrypoint), das die Umgebung zurücksetzt; ein direktes `CMD`
+  bekommt die Container-Variablen nicht. Fix: **`S6_KEEP_ENV=1`** im Dockerfile reicht die
+  Umgebung (inkl. Token) an den Node-Prozess durch. Damit funktioniert der HA-API-Zugriff.
+
 ## 0.1.7 – 2026-07-24
 
 - Reiner Versions-Bump wegen der Store-Cache-Verzögerung im Supervisor. Inhaltlich identisch mit
