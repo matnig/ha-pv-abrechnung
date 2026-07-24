@@ -5,6 +5,12 @@ automatischem **Tages-/Monats-/Jahresbericht per Mail**. Gedacht für den
 Energiemanager, der mehrere fremde HA-Installationen betreut: pro HA-Instanz
 installieren, alles über die Web-UI in der Seitenleiste konfigurieren.
 
+> ⚠️ **Haftungsausschluss:** Nutzung auf eigenes Risiko, ohne Gewährleistung. Diese Software
+> ist **keine eichrechtskonforme Abrechnungslösung** und ersetzt keine Rechts-/Steuerberatung.
+> Richtigkeit der Zählerstände und Beträge sowie Rechts-/DSGVO-Konformität liegen beim Nutzer.
+> Vollständiger Haftungsausschluss und Bedienungsanleitung im
+> [Repo-README](https://github.com/matnig/ha-pv-abrechnung#haftungsausschluss--disclaimer).
+
 ## Prinzip
 
 - Abrechnung = **Anfangsstand → Endstand** je Zähler (Differenz × Tarif), keine PDF-Rechnung.
