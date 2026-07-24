@@ -2,6 +2,12 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.21 – 2026-07-24
+
+- **Netzbezug (und alle echten Zähler) rückwirkend korrekt**: Der Einheiten-Faktor (kWh/Wh/MWh)
+  wird bei Bedarf direkt aus HA geholt, auch für frisch angelegte Zähler, die noch nie gepollt
+  wurden. So stimmen Autarkiegrad und Ersparnis von Anfang an (kein 1000×-Fehler bei Wh-Zählern).
+
 ## 0.1.20 – 2026-07-24
 
 ### Auswertung, Transparenz & Einrichtungshilfe

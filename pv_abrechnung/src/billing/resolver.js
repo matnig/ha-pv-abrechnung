@@ -101,8 +101,18 @@ async function resolvePeriodReadings(config, snapshots, period, opts = {}) {
 
     if (useStats) {
       try {
-        const factor = (snapshots[meter.entityId] || {}).unitFactor || 1;
-        b = await fromStatistics(meter.entityId, period, ha, factor);
+        // Einheiten-Faktor: aus dem Poll bekannt, sonst direkt aus HA holen (wichtig für
+        // frisch angelegte Zähler, die noch nie gepollt wurden, z.B. in Wh/MWh).
+        let factor = (snapshots[meter.entityId] || {}).unitFactor;
+        if (factor == null && ha.getState) {
+          try {
+            const st = await ha.getState(meter.entityId);
+            factor = haClient.unitFactorToKwh((st.attributes && st.attributes.unit_of_measurement) || '');
+          } catch {
+            /* ignore -> Standard 1 */
+          }
+        }
+        b = await fromStatistics(meter.entityId, period, ha, factor || 1);
         if (b) source = 'statistics';
       } catch (err) {
         warnings.push('HA-Statistik nicht erreichbar, Fallback Polling: ' + (err.message || err));
