@@ -394,35 +394,42 @@ const ANOMALY_LABEL = {
   jitter: 'kleiner Rückwärts-Sprung', transient: 'kurzzeitige Störung (Wert kam zurück)', error: 'Lesefehler',
 };
 
+let archivedAnomalies = [];
+function anomalyBadge(r) {
+  return r
+    ? r.classification === 'kritisch'
+      ? '<span style="color:#b91c1c;font-weight:600">● kritisch</span>'
+      : '<span style="color:#166534;font-weight:600">● unkritisch</span>'
+    : '<span style="color:#b45309">● nicht bewertet</span>';
+}
+
 async function loadAnomalies() {
   try {
     const d = await api('api/anomalies');
-    const list = d.anomalies || [];
-    $('anomalies').innerHTML = list.length
-      ? list
+    const open = d.open || [];
+    archivedAnomalies = d.archived || [];
+    // Aktive (noch nicht bewertete) Auffälligkeiten – mit Bewertungs-Buttons.
+    $('anomalies').innerHTML = open.length
+      ? open
           .map((a) => {
-            const r = a.review;
-            const badge = r
-              ? r.classification === 'kritisch'
-                ? '<span style="color:#b91c1c;font-weight:600">● kritisch</span>'
-                : '<span style="color:#166534;font-weight:600">● unkritisch</span>'
-              : '<span style="color:#b45309">● nicht bewertet</span>';
-            const meta = r ? `<div class="tag">bewertet von ${esc(r.reviewedByName)} am ${new Date(r.reviewedAt).toLocaleString('de-DE')}</div>` : '';
             return `<div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px">
               <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
                 <div><b>${esc(a.name || a.entityId)}</b> – ${esc(ANOMALY_LABEL[a.type] || a.type)}
                   <span class="tag">${new Date(a.at).toLocaleString('de-DE')}</span></div>
-                <div>${badge}</div>
+                <div>${anomalyBadge(null)}</div>
               </div>
-              ${meta}
               <div class="row" style="margin-top:6px">
-                <div style="flex:2"><input id="note_${a.id}" placeholder="Bewertungstext…" value="${esc(r ? r.note : '')}" /></div>
+                <div style="flex:2"><input id="note_${esc(a.id)}" placeholder="Bewertungstext…" /></div>
                 <div style="max-width:150px"><button class="sec" onclick="reviewAnomaly('${encodeURIComponent(a.id)}','unkritisch')">unkritisch</button></div>
                 <div style="max-width:150px"><button class="danger" onclick="reviewAnomaly('${encodeURIComponent(a.id)}','kritisch')">kritisch</button></div>
-              </div></div>`;
+              </div>
+              <div class="hint">Nach dem Bewerten unveränderlich – der Eintrag wandert ins Archiv.</div></div>`;
           })
           .join('')
-      : '<p style="color:#16a34a">✓ Keine Auffälligkeiten protokolliert.</p>';
+      : '<p style="color:#16a34a">✓ Keine offenen Auffälligkeiten.</p>';
+
+    // Archiv (bereits bewertet) neu rendern, falls gerade eingeblendet.
+    if ($('anomaliesArchive').style.display !== 'none') renderArchive();
 
     const proto = d.protocol || [];
     $('incidentProtocol').innerHTML = proto.length
@@ -455,6 +462,35 @@ async function sendIncidentReport() {
     loadAnomalies();
   } catch (e) {
     flash('Incident-Report fehlgeschlagen: ' + e.message, false);
+  }
+}
+
+function renderArchive() {
+  const el = $('anomaliesArchive');
+  el.innerHTML = archivedAnomalies.length
+    ? '<b>Bearbeitete Auffälligkeiten (unveränderlich):</b>' + archivedAnomalies
+        .map((a) => {
+          const r = a.review;
+          return `<div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:8px;background:#fafafa">
+            <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+              <div><b>${esc(a.name || a.entityId)}</b> – ${esc(ANOMALY_LABEL[a.type] || a.type)}
+                <span class="tag">${new Date(a.at).toLocaleString('de-DE')}</span></div>
+              <div>${anomalyBadge(r)}</div>
+            </div>
+            <div class="tag">bewertet von ${esc(r.reviewedByName)} am ${new Date(r.reviewedAt).toLocaleString('de-DE')}${r.note ? ' · ' + esc(r.note) : ''}</div>
+          </div>`;
+        })
+        .join('')
+    : '<p class="mini">Noch keine bearbeiteten Auffälligkeiten.</p>';
+}
+
+function toggleArchive() {
+  const el = $('anomaliesArchive');
+  if (el.style.display === 'none') {
+    renderArchive();
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
   }
 }
 
@@ -581,16 +617,93 @@ async function loadLedger() {
   }
 }
 
+// ---- Tab-Navigation ----
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((s) => s.classList.toggle('active', s.id === 'tab-' + name));
+  document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  if (name === 'overview') loadOverview();
+  else if (name === 'incident') loadAnomalies();
+  else if (name === 'abrechnung') loadLedger();
+  try { history.replaceState(null, '', '#' + name); } catch { /* ignore */ }
+  window.scrollTo(0, 0);
+}
+
+// ---- Übersicht: Status + stündliche Energie heute/gestern + Sonnenstunden ----
+const ROLE_META = {
+  erzeugung: { label: 'PV-Erzeugung', color: '#16a34a' },
+  verbrauch: { label: 'Verbrauch', color: '#2563eb' },
+  netzbezug: { label: 'Netzbezug', color: '#f59e0b' },
+  einspeisung: { label: 'Einspeisung', color: '#0d9488' },
+};
+
+function hourBars(arr, max, color, faded) {
+  return '<div class="daychart">' + (arr || [])
+    .map((v, h) => {
+      const ht = Math.round((v / (max || 1)) * 88);
+      return `<div class="b" style="height:${Math.max(1, ht)}px;background:${color};opacity:${faded ? 0.35 : 0.9}" title="${h}:00 – ${v.toLocaleString('de-DE', { maximumFractionDigits: 2 })} kWh"></div>`;
+    })
+    .join('') + '</div>';
+}
+
+function renderDayChart(o) {
+  const roles = o.roles || [];
+  if (!roles.length) {
+    $('overviewChart').innerHTML = '<p class="mini">Keine Zähler mit Rolle Erzeugung/Verbrauch/Netz konfiguriert – unter „Einstellungen → Zähler" zuordnen.</p>';
+    return;
+  }
+  const sun = o.sunHours || {};
+  const sunKpi = sun.today != null
+    ? `<span class="kpi">☀️ Sonnenstunden heute: <b>${sun.today}</b> · gestern: <b>${sun.yesterday}</b></span>`
+    : '';
+  const blocks = roles
+    .map((role) => {
+      const s = o.series[role] || {};
+      const m = ROLE_META[role] || { label: role, color: '#6b7280' };
+      const max = Math.max(0.001, ...(s.today || []), ...(s.yesterday || []));
+      return `<div class="ov-role">
+        <div class="ov-head"><b style="color:${m.color}">${m.label}</b>
+          <span>heute <b>${(s.todaySum || 0).toLocaleString('de-DE', { maximumFractionDigits: 2 })} kWh</b> · gestern ${(s.ydaySum || 0).toLocaleString('de-DE', { maximumFractionDigits: 2 })} kWh</span></div>
+        ${hourBars(s.today, max, m.color, false)}
+        ${hourBars(s.yesterday, max, m.color, true)}
+        <div class="ov-axis"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span></div>
+      </div>`;
+    })
+    .join('');
+  $('overviewChart').innerHTML =
+    `<div style="margin-bottom:8px">${sunKpi}</div>${blocks}` +
+    '<p class="mini">Kräftige Balken = heute, blasse = gestern (je Rolle gleich skaliert).</p>' +
+    (o.haError ? `<p class="mini" style="color:#b45309">Hinweis: HA-Statistik aktuell nicht abrufbar (${esc(o.haError)}).</p>` : '');
+}
+
+async function loadOverview() {
+  try {
+    const o = await api('api/overview');
+    const s = o.summary || {};
+    const bat = (s.batteries || []).length
+      ? ' · 🔋 ' + s.batteries.map((b) => `${esc(b.name || b.entityId)}: <b>${b.value != null ? b.value + esc(b.unit || '%') : '–'}</b>`).join(', ')
+      : '';
+    $('overviewSummary').innerHTML =
+      `<span class="kpi">${s.meters || 0} Zähler · ${s.virtual || 0} virtuelle</span>` +
+      `<span class="kpi" style="color:${s.openIncidents ? '#b91c1c' : '#166534'}">Offene Störungen: <b>${s.openIncidents || 0}</b></span>` +
+      `<span class="kpi" style="color:${s.anomaliesOpen ? '#b45309' : '#166534'}">Offene Auffälligkeiten: <b>${s.anomaliesOpen || 0}</b></span>` +
+      bat;
+    renderDayChart(o);
+    loadStatus();
+  } catch (e) {
+    $('overviewChart').textContent = 'Übersicht nicht ladbar: ' + e.message;
+  }
+}
+
 async function init() {
   loadVersion();
   try {
     config = await api('api/config');
     fillForm();
     await loadEntities();
-    await loadStatus();
     await loadIncidents();
-    await loadAnomalies();
     await loadLedger();
+    const startTab = (location.hash || '').replace('#', '') || 'overview';
+    showTab(['overview', 'einstellungen', 'berichte', 'incident', 'abrechnung'].includes(startTab) ? startTab : 'overview');
   } catch (e) {
     flash('Initialisierung fehlgeschlagen: ' + e.message, false);
   }

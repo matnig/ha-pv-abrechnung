@@ -53,8 +53,15 @@ function listAnomalies(opts = {}) {
 }
 
 // Bewertung setzen. user = { id, name } aus den HA-Ingress-Headern.
+// Einmal bewertete Auffälligkeiten sind UNVERÄNDERLICH (nachträglich nicht mehr änderbar) und
+// wandern aus der aktiven Liste ins Archiv.
 function setReview(id, { note, classification, user } = {}) {
   const reviews = loadReviews();
+  if (reviews[id]) {
+    const err = new Error('Diese Auffälligkeit wurde bereits bewertet und ist unveränderlich.');
+    err.code = 'ALREADY_REVIEWED';
+    throw err;
+  }
   reviews[id] = {
     note: String(note || '').slice(0, 2000),
     classification: classification === 'kritisch' ? 'kritisch' : 'unkritisch',

@@ -33,8 +33,11 @@ test('setReview speichert Text, Einstufung und HA-Nutzer/Zeit; attachReviews hef
   assert.strictEqual(r.reviewedByName, 'Matteus');
   assert.ok(r.reviewedAt > 0);
 
-  // ungültige Einstufung -> unkritisch (nur kritisch/unkritisch erlaubt)
-  const r2 = reviews.setReview(target.id, { note: '', classification: 'blah', user: {} });
+  // bereits bewertet -> unveränderlich (wirft ALREADY_REVIEWED)
+  assert.throws(() => reviews.setReview(target.id, { note: 'x', classification: 'kritisch', user: {} }), /bereits bewertet/i);
+
+  // ungültige Einstufung auf FRISCHER Auffälligkeit -> unkritisch (nur kritisch/unkritisch erlaubt)
+  const r2 = reviews.setReview('sensor.z#999#stale', { note: '', classification: 'blah', user: {} });
   assert.strictEqual(r2.classification, 'unkritisch');
   assert.strictEqual(r2.reviewedByName, 'Unbekannt');
 

@@ -12,6 +12,7 @@ const ledger = require('../billing/ledger');
 const { getSeries } = require('../stats/stats');
 const { verify, sendIncidentReport } = require('../mail/mailer');
 const reviews = require('../review/reviews');
+const { buildOverview } = require('../overview/overview');
 const { readJson } = require('../store/store');
 const { dayPeriod, previousMonth, previousYear, previousDay, monthPeriod, yearPeriod } = require('../billing/periods');
 
@@ -95,15 +96,36 @@ function createServer() {
     res.json({ at: now, meters, batteries, reports: readJson('reports.json', []).slice(-20).reverse() });
   });
 
-  // Daten-Auffälligkeiten (Incident-Review): auflisten, bewerten, Incident-Report absenden.
-  app.get('/api/anomalies', (req, res) => res.json({ anomalies: reviews.listAnomalies(), protocol: reviews.loadProtocol().slice(-20).reverse() }));
+  // Tages-Übersicht (Startseite): Status + stündliche Energie heute/gestern + Sonnenstunden.
+  app.get('/api/overview', async (req, res) => {
+    try {
+      res.json(await buildOverview(loadConfig(), loadSnapshots(), haClient));
+    } catch (err) {
+      res.json({ error: String(err.message || err), series: {}, summary: {} });
+    }
+  });
+
+  // Daten-Auffälligkeiten (Incident-Review): offene (aktive) und bereits bewertete (Archiv).
+  app.get('/api/anomalies', (req, res) => {
+    const all = reviews.listAnomalies();
+    res.json({
+      open: all.filter((a) => !a.review),
+      archived: all.filter((a) => a.review),
+      protocol: reviews.loadProtocol().slice(-20).reverse(),
+    });
+  });
 
   app.post('/api/anomalies/review', (req, res) => {
     const { id, note, classification } = req.body || {};
     if (!id) return res.status(400).json({ error: 'id fehlt' });
-    const user = haUser(req);
-    const review = reviews.setReview(id, { note, classification, user });
-    res.json({ ok: true, id, review });
+    try {
+      const user = haUser(req);
+      const review = reviews.setReview(id, { note, classification, user });
+      res.json({ ok: true, id, review });
+    } catch (err) {
+      // Bereits bewertet -> unveränderlich (409), sonst 400.
+      res.status(err.code === 'ALREADY_REVIEWED' ? 409 : 400).json({ error: String(err.message || err) });
+    }
   });
 
   app.post('/api/incident-report/send', async (req, res) => {
@@ -111,7 +133,9 @@ function createServer() {
       const config = loadConfig();
       const user = haUser(req);
       const sentBy = user.name || user.id || 'Unbekannt';
-      const anomalies = reviews.listAnomalies();
+      // Dokumentiert die bereits bewerteten Auffälligkeiten (Archiv).
+      const anomalies = reviews.listAnomalies().filter((a) => a.review);
+      if (!anomalies.length) return res.status(400).json({ error: 'Keine bewerteten Auffälligkeiten zum Dokumentieren.' });
       const sentAt = Date.now();
       const mail = await sendIncidentReport(config, { anomalies, sentBy, sentAt });
       const critical = anomalies.filter((a) => a.review && a.review.classification === 'kritisch').length;
