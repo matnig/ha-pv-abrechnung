@@ -41,8 +41,8 @@ function main() {
   const intervalMs = pollIntervalMinutes() * 60000;
   console.log(`[poll] Intervall: ${pollIntervalMinutes()} min`);
   // Nach einem (Neu-)Start ist die HA-API oft kurz mit 502 nicht bereit -> Selbsttest/Poll verzögern.
-  setTimeout(haSelfCheck, 8000);
-  setTimeout(safePoll, 15000);
+  setTimeout(haSelfCheck, 5000);
+  setTimeout(safePoll, 6000);
   setInterval(safePoll, intervalMs);
 
   scheduler.start();

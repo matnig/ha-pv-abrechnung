@@ -2,6 +2,12 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.17 – 2026-07-24
+
+- **Status zeigt nur noch aktuelle Auffälligkeiten (letzte Stunde).** Alte „error/unavailable"-Einträge
+  aus der Zeit vor dem 0.1.16-Fix bleiben nicht mehr dauerhaft stehen – gesunde Zähler zeigen „✓".
+- Erster Poll nach Start früher (6 s), damit bei häufigen Neustarts überhaupt ein Abruf läuft.
+
 ## 0.1.16 – 2026-07-24
 
 ### Behoben: Zähler fälschlich „unavailable"

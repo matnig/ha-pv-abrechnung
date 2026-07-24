@@ -56,12 +56,13 @@ function createServer() {
 
   app.get('/api/status', (req, res) => {
     const snap = loadSnapshots();
+    const cutoff = Date.now() - 60 * 60 * 1000; // nur Auffälligkeiten der letzten Stunde zeigen
     const meters = Object.entries(snap).map(([entityId, e]) => ({
       entityId,
       lastEffective: e.lastEffective,
       lastTs: e.lastTs,
       days: Object.keys(e.daily || {}).length,
-      recentAnomalies: (e.anomalies || []).slice(-5),
+      recentAnomalies: (e.anomalies || []).filter((a) => (a.at || 0) >= cutoff).slice(-5),
     }));
     res.json({ meters, reports: readJson('reports.json', []).slice(-20).reverse() });
   });
