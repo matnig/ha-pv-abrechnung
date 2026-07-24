@@ -93,6 +93,12 @@ function processReading(prev, reading, cfg = {}) {
     return done(s, s.offset + raw, true, anomalies);
   }
 
+  // "Hängt/offline" NUR anhand von HA `last_updated` (Gerät meldet nichts mehr) – NICHT anhand
+  // eines gleichbleibenden Werts. Ein flacher Energiezähler ist normal (nachts / Akku deckt Last).
+  if (reading.lastUpdated != null && now - reading.lastUpdated >= c.staleMinutes * 60000) {
+    anomalies.push({ type: 'stale', at: now, sinceUpdate: reading.lastUpdated, minutes: Math.round((now - reading.lastUpdated) / 60000) });
+  }
+
   if (s.pending) {
     return resolvePending(s, raw, now, c, anomalies);
   }
@@ -106,12 +112,9 @@ function processReading(prev, reading, cfg = {}) {
     return done(s, s.offset + s.lastRaw, false, anomalies);
   }
 
-  // Keine Änderung -> evtl. stale
+  // Keine Wertänderung -> völlig normal bei Energiezählern (kein Verbrauch/keine Einspeisung).
+  // KEINE stale-Warnung mehr am gleichbleibenden Wert (siehe last_updated-Prüfung oben).
   if (Math.abs(delta) <= 1e-9) {
-    const minutes = s.lastChangeTs != null ? (now - s.lastChangeTs) / 60000 : 0;
-    if (minutes >= c.staleMinutes) {
-      anomalies.push({ type: 'stale', at: now, since: s.lastChangeTs, minutes: Math.round(minutes) });
-    }
     s.lastRawTs = now;
     return done(s, s.offset + raw, false, anomalies);
   }

@@ -63,7 +63,8 @@ async function pollOnce(config, opts = {}) {
     // Rohwert immer auf kWh normalisieren (Wh/MWh -> kWh), damit alle Berechnungen in kWh laufen.
     const n = Number(String(st.state).replace(',', '.'));
     const rawKwh = available && Number.isFinite(n) ? n * factor : st.state;
-    const reading = { raw: rawKwh, available, now };
+    const lu = st.last_updated ? Date.parse(st.last_updated) : st.last_changed ? Date.parse(st.last_changed) : NaN;
+    const reading = { raw: rawKwh, available, now, lastUpdated: Number.isFinite(lu) ? lu : null };
 
     const out = processReading(entry.state, reading, mc);
     entry.state = out.state;

@@ -2,6 +2,14 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.26 – 2026-07-24
+
+### Behoben: Fehlalarm „Wert stand still"
+- Ein gleichbleibender Zählerstand ist bei Energiezählern normal (nachts / Akku deckt die Last →
+  kein Netzbezug/keine Einspeisung). Die „hängt/offline"-Erkennung basiert jetzt auf HAs
+  `last_updated` (Gerät meldet nichts mehr), nicht mehr auf einem unveränderten Wert. Damit keine
+  falschen „stale"-Auffälligkeiten mehr bei flachen Zählern.
+
 ## 0.1.25 – 2026-07-24
 
 - Phantom-Bump (Store-Cache-Workaround). Inhaltlich identisch mit 0.1.24 (Stammdaten).

@@ -86,8 +86,13 @@ test('swapMeter ohne offene Störung tut nichts', () => {
 });
 
 test('stale, unavailable, jitter, spike weiterhin korrekt', () => {
-  const stale = processReading({ offset: 0, lastRaw: 100, lastRawTs: 0, lastChangeTs: 0, effective: 100, pending: null }, { raw: 100, now: 200 * MIN }, { staleMinutes: 180 });
-  assert.strictEqual(stale.anomalies[0].type, 'stale');
+  const base = { offset: 0, lastRaw: 100, lastRawTs: 0, lastChangeTs: 0, effective: 100, pending: null };
+  // Gerät meldet HA seit 200 min nichts mehr -> stale/offline
+  const stale = processReading(base, { raw: 100, now: 200 * MIN, lastUpdated: 0 }, { staleMinutes: 180 });
+  assert.ok(stale.anomalies.some((a) => a.type === 'stale'));
+  // flacher Wert, aber HA bekommt frische Updates (z.B. Akku deckt Last nachts) -> KEIN stale
+  const flat = processReading(base, { raw: 100, now: 200 * MIN, lastUpdated: 195 * MIN }, { staleMinutes: 180 });
+  assert.ok(!flat.anomalies.some((a) => a.type === 'stale'));
 
   const un = feed([{ raw: 100, now: 0 }, { raw: 'x', available: false, now: H }]).last;
   assert.strictEqual(un.effective, 100);
