@@ -32,19 +32,34 @@ test('Statistics-Pfad: kWh aus change, Anfangs-/Endstand aus state', async () =>
   assert.strictEqual(r.m1.warnings.length, 0);
 });
 
-test('Reset im Zeitraum: kWh bleibt reset-sicher, Warnung gesetzt', async () => {
+test('0-Aussetzer im Zeitraum wird per Monotonie abgefangen', async () => {
   const ha = {
     statisticsDuringPeriod: async () => ({
       'sensor.w1': [
-        { start: ms(2026, 5, 30), state: 1000, change: null },
-        { start: ms(2026, 6, 1), state: 50, change: 100 },
-        { start: ms(2026, 6, 31), state: 150, change: 100 }, // roher state fällt (Reset), change korrekt
+        { start: ms(2026, 5, 30), state: 1000 },
+        { start: ms(2026, 6, 1), state: 0 }, // 0-Aussetzer
+        { start: ms(2026, 6, 31), state: 1080 }, // erholt sich, real +80
       ],
     }),
   };
   const r = await resolvePeriodReadings(config, {}, july, { ha });
-  assert.strictEqual(r.m1.kwh, 200);
-  assert.ok(r.m1.warnings.some((w) => /Reset/.test(w)));
+  assert.strictEqual(r.m1.kwh, 80); // 1080 - 1000, der 0-Wert wird gehalten
+});
+
+test('Rumpf-Periode: frühester verfügbarer Stand als Anfangsstand', async () => {
+  const ha = {
+    statisticsDuringPeriod: async () => ({
+      'sensor.w1': [
+        { start: ms(2026, 6, 10), state: 100 }, // Zähler beginnt erst am 10. Juli
+        { start: ms(2026, 6, 31), state: 260 },
+      ],
+    }),
+  };
+  const r = await resolvePeriodReadings(config, {}, july, { ha });
+  assert.strictEqual(r.m1.anfang, 100);
+  assert.strictEqual(r.m1.anfangDatum, '2026-07-10');
+  assert.strictEqual(r.m1.kwh, 160);
+  assert.ok(r.m1.warnings.some((w) => /erstem verfügbaren Datum/.test(w)));
 });
 
 test('HA nicht erreichbar -> Fallback auf Polling-Snapshots', async () => {

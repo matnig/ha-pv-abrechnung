@@ -2,6 +2,7 @@
 
 const { toDateStr, addDays } = require('./periods');
 const haClient = require('../ha/haClient');
+const { dailyCumKwh } = require('../ha/statistics');
 
 const ROLE_LABEL = {
   verbrauch: 'Verbrauch',
@@ -17,18 +18,13 @@ function round2(n) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
-// Größter Tages-Zählerstand mit Datum <= dateStr (aus den bereinigten Polling-Werten).
+// Größter Tages-Zählerstand mit Datum <= dateStr. Gibt { value, date } zurück.
 function valueAtOrBefore(daily, dateStr) {
   let bestKey = null;
   for (const key of Object.keys(daily)) {
     if (key <= dateStr && (bestKey === null || key > bestKey)) bestKey = key;
   }
   return bestKey === null ? { value: null, date: null } : { value: daily[bestKey], date: bestKey };
-}
-
-// HA liefert bucket.start je nach Version als ms-Zahl oder ISO-String.
-function bucketStartMs(b) {
-  return typeof b.start === 'number' ? b.start : Date.parse(b.start);
 }
 
 function meterBase(meter) {
@@ -42,153 +38,116 @@ function meterBase(meter) {
 }
 
 /**
- * Periodenwerte aus HA-Long-Term-Statistics (Tages-Buckets).
- * kWh = Summe der `change`-Werte (reset-sicher, von HA gepflegt) – überlebt
- * Add-on-Downtime, weil der Recorder unabhängig vom Add-on aufzeichnet.
- * Fällt `change` weg (ältere HA-Version), wird die Differenz der `sum`-Werte genutzt.
- * @returns {null|{anfang:number|null, ende:number|null, kwh:number}}
+ * Anfangsstand/Endstand/kWh für eine Periode aus einem täglichen kumulativen Verlauf
+ * ({date: kWh}). Fehlt der Stand am Periodenanfang (Zähler/Statistik beginnt erst
+ * innerhalb der Periode), wird der FRÜHESTE verfügbare Stand im Zeitraum genutzt
+ * (Rumpf-Periode) – so lässt sich der erste angebrochene Monat/Jahr trotzdem abrechnen.
  */
-async function fromStatistics(entityId, period, ha, factor = 1) {
-  const startISO = new Date(period.start.getTime() - DAY_MS).toISOString(); // ein Tag Vorlauf für Anfangsstand
-  const endISO = period.end.toISOString();
-  const res = await ha.statisticsDuringPeriod([entityId], startISO, endISO, 'day');
-  const buckets = (res && res[entityId]) || [];
-  if (!buckets.length) return null;
+function computeBoundaries(cum, period) {
+  const anfangTarget = toDateStr(addDays(period.start, -1)); // Stand am Vortag des Beginns
+  const endeTarget = toDateStr(addDays(period.end, -1)); // Stand am letzten Tag
+  const startStr = toDateStr(period.start);
 
-  const sMs = period.start.getTime();
-  const eMs = period.end.getTime();
-  let anfang = null;
-  let ende = null;
-  let kwh = 0;
-  let haveChange = false;
-  let firstSum = null;
-  let lastSum = null;
-
-  for (const b of buckets) {
-    const ms = bucketStartMs(b);
-    if (ms < sMs && b.state != null) anfang = Number(b.state); // Stand direkt vor Periodenbeginn
-    if (ms < eMs && b.state != null) ende = Number(b.state); // Stand am Periodenende
-    if (ms >= sMs && ms < eMs) {
-      if (b.change != null) {
-        kwh += Number(b.change);
-        haveChange = true;
-      }
-      if (b.sum != null) {
-        if (firstSum === null) firstSum = Number(b.sum);
-        lastSum = Number(b.sum);
-      }
+  const e = valueAtOrBefore(cum, endeTarget);
+  let a = valueAtOrBefore(cum, anfangTarget);
+  let fallback = false;
+  if (a.value == null) {
+    const inPeriod = Object.keys(cum).filter((d) => d >= startStr && d <= endeTarget).sort();
+    if (inPeriod.length) {
+      a = { value: cum[inPeriod[0]], date: inPeriod[0] };
+      fallback = true;
     }
   }
 
-  if (!haveChange) {
-    if (firstSum != null && lastSum != null) kwh = lastSum - firstSum;
-    else return null; // keine verwertbaren Daten
+  const warnings = [];
+  let kwh = null;
+  if (a.value == null || e.value == null) {
+    warnings.push('keine Zählerstände im Zeitraum');
+  } else {
+    kwh = round2(e.value - a.value);
+    if (fallback) warnings.push(`Anfangsstand ab erstem verfügbaren Datum ${a.date}`);
+    if (kwh < 0) warnings.push('negativer Verbrauch (Datenlücke/Reset?)');
   }
-  // LTS-Werte sind in der Roh-Einheit des Sensors -> auf kWh normalisieren.
-  return {
-    anfang: anfang != null ? round2(anfang * factor) : null,
-    ende: ende != null ? round2(ende * factor) : null,
-    kwh: round2(kwh * factor),
-  };
+  return { anfang: a.value, anfangDatum: a.date, ende: e.value, endeDatum: e.date, kwh, fallback, warnings };
+}
+
+/**
+ * Periodenwerte aus HA-Long-Term-Statistics – über den glitch-sicheren, monotonen
+ * Zählerstand (`state`), inkl. „frühester verfügbarer Stand"-Fallback.
+ * @returns {null|{anfang, anfangDatum, ende, endeDatum, kwh, fallback}}
+ */
+async function fromStatistics(entityId, period, ha, factor = 1) {
+  const startISO = new Date(period.start.getTime() - 2 * DAY_MS).toISOString();
+  const endISO = new Date(period.end.getTime()).toISOString();
+  const cum = await dailyCumKwh(entityId, startISO, endISO, ha, factor);
+  if (!Object.keys(cum).length) return null;
+  return computeBoundaries(cum, period);
 }
 
 /**
  * Ermittelt je Zähler Anfangsstand/Endstand/kWh für die Periode.
- * Priorität: HA-Statistics (robust) -> eigenes Polling (Fallback).
- * Reine Datenbeschaffung; die Geldbeträge macht computeBilling.
+ * Priorität: HA-Statistics (robust, glitch-sicher) -> eigenes Polling (Fallback).
  * @param {object} [opts] { ha } – für Tests injizierbar
  */
 async function resolvePeriodReadings(config, snapshots, period, opts = {}) {
   const ha = opts.ha || haClient;
   const useStats = config.useStatistics !== false;
-  const anfangTarget = toDateStr(addDays(period.start, -1));
-  const endeTarget = toDateStr(addDays(period.end, -1));
   const out = {};
 
   for (const meter of config.meters || []) {
     const warnings = [];
-    let stats = null;
+    let b = null;
+    let source = null;
 
     if (useStats) {
       try {
         const factor = (snapshots[meter.entityId] || {}).unitFactor || 1;
-        stats = await fromStatistics(meter.entityId, period, ha, factor);
+        b = await fromStatistics(meter.entityId, period, ha, factor);
+        if (b) source = 'statistics';
       } catch (err) {
         warnings.push('HA-Statistik nicht erreichbar, Fallback Polling: ' + (err.message || err));
       }
     }
 
-    if (stats && Number.isFinite(stats.kwh)) {
-      if (stats.anfang != null && stats.ende != null) {
-        const rawDiff = round2(stats.ende - stats.anfang);
-        if (Math.abs(rawDiff - stats.kwh) > 0.5) {
-          warnings.push('Zähler-Reset im Zeitraum – kWh reset-sicher aus Statistik übernommen');
-        }
-      }
-      if (stats.anfang == null) warnings.push('kein Anfangsstand in Statistik');
-      if (stats.ende == null) warnings.push('kein Endstand in Statistik');
-      out[meter.id] = {
-        ...meterBase(meter),
-        anfang: stats.anfang,
-        anfangDatum: anfangTarget,
-        ende: stats.ende,
-        endeDatum: endeTarget,
-        kwh: stats.kwh,
-        source: 'statistics',
-        warnings,
-      };
-      continue;
+    if (!b) {
+      const daily = (snapshots[meter.entityId] || {}).daily || {};
+      b = computeBoundaries(daily, period);
+      source = 'poll';
     }
 
-    // Fallback: eigene bereinigte Polling-Zählerstände
-    const daily = (snapshots[meter.entityId] || {}).daily || {};
-    const a = valueAtOrBefore(daily, anfangTarget);
-    const e = valueAtOrBefore(daily, endeTarget);
-    let kwh = null;
-    if (a.value == null || e.value == null) {
-      warnings.push('keine Zählerstände im Zeitraum (Polling)');
-    } else {
-      kwh = round2(e.value - a.value);
-      if (kwh < 0) warnings.push('negativer Verbrauch (Datenlücke/Reset?)');
-      if (a.date !== anfangTarget) warnings.push(`Anfangsstand vom ${a.date} statt ${anfangTarget}`);
-      if (e.date !== endeTarget) warnings.push(`Endstand vom ${e.date} statt ${endeTarget}`);
-    }
     out[meter.id] = {
       ...meterBase(meter),
-      anfang: a.value,
-      anfangDatum: a.date,
-      ende: e.value,
-      endeDatum: e.date,
-      kwh,
-      source: 'poll',
-      warnings,
+      anfang: b.anfang,
+      anfangDatum: b.anfangDatum,
+      ende: b.ende,
+      endeDatum: b.endeDatum,
+      kwh: b.kwh,
+      source,
+      warnings: [...warnings, ...b.warnings],
     };
   }
 
-  // Virtuelle, fortlaufende Zähler: Stand aus dem gespeicherten virtuellen Verlauf.
-  // Der ist per Konstruktion stetig (auch über Zählertausch), daher ist kWh = Ende − Anfang korrekt.
+  // Virtuelle Zähler: aus dem gespeicherten (backfill-/poll-)Verlauf; nie negativ.
   for (const vm of config.virtualMeters || []) {
-    const warnings = [];
     const daily = (snapshots['virtual:' + vm.id] || {}).daily || {};
-    const a = valueAtOrBefore(daily, anfangTarget);
-    const e = valueAtOrBefore(daily, endeTarget);
-    let kwh = null;
-    if (a.value == null || e.value == null) warnings.push('virtueller Zähler ohne Verlauf im Zeitraum – ggf. „Rückwirkend berechnen"');
-    else {
-      const diff = round2(e.value - a.value);
-      kwh = Math.max(0, diff); // nie negativ
-      if (diff < 0) warnings.push('negativer Rohwert auf 0 gedeckelt (Startdatum/Backfill prüfen)');
+    const b = computeBoundaries(daily, period);
+    const warnings = [...b.warnings];
+    let kwh = b.kwh;
+    if (kwh != null && kwh < 0) {
+      kwh = 0;
+      warnings.push('negativer Rohwert auf 0 gedeckelt (Startdatum/Backfill prüfen)');
     }
+    if (b.anfang == null) warnings.push('virtueller Zähler ohne Verlauf – ggf. „Rückwirkend berechnen"');
     out[vm.id] = {
       meterId: vm.id,
       name: vm.name,
       entityId: 'virtual:' + vm.id,
       role: vm.role,
       roleLabel: ROLE_LABEL[vm.role] || vm.role,
-      anfang: a.value,
-      anfangDatum: a.date,
-      ende: e.value,
-      endeDatum: e.date,
+      anfang: b.anfang,
+      anfangDatum: b.anfangDatum,
+      ende: b.ende,
+      endeDatum: b.endeDatum,
       kwh,
       source: 'virtual',
       virtual: true,
@@ -199,4 +158,4 @@ async function resolvePeriodReadings(config, snapshots, period, opts = {}) {
   return out;
 }
 
-module.exports = { resolvePeriodReadings, fromStatistics, valueAtOrBefore, round2, ROLE_LABEL };
+module.exports = { resolvePeriodReadings, fromStatistics, computeBoundaries, valueAtOrBefore, round2, ROLE_LABEL };

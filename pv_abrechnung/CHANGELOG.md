@@ -2,6 +2,19 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.14 – 2026-07-24
+
+### Bericht: frühester Stand + Jahresbericht + glitch-sicher
+- **Rumpf-Perioden abrechenbar:** Fehlt der Zählerstand am Perioden-Anfang (Zähler/Statistik
+  beginnt erst mitten im Zeitraum), wird der **früheste verfügbare Stand** als Anfangsstand
+  genutzt (mit Hinweis „Anfangsstand ab erstem verfügbaren Datum …"). Gilt für echte UND virtuelle Zähler.
+- **Bericht-Statistik glitch-sicher:** Auch der Bericht nutzt jetzt den monotonen Zählerstand
+  (`state`) statt der bei 0-Aussetzern aufgeblähten `sum` – die Mengen stimmen jetzt auch bei
+  Zählern mit kurzen 0-Aussetzern (z.B. Tasmota).
+- **Zeitraum-Auswahl erweitert:** Vormonat, **Aktueller Monat**, Vorjahr, **Aktuelles Jahr**, Gestern –
+  der Jahresbericht nutzt dasselbe Prinzip.
+- Diagnose: „frühestes Datum ermitteln" protokolliert jetzt je Zähler die gefundenen Statistiktage.
+
 ## 0.1.13 – 2026-07-24
 
 ### Behoben (virtueller Zähler ergab fälschlich 0)

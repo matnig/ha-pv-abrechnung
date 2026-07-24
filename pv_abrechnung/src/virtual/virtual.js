@@ -12,6 +12,7 @@
 
 const haClient = require('../ha/haClient');
 const { toDateStr } = require('../billing/periods');
+const { dailyCumKwh } = require('../ha/statistics');
 
 function bucketStartMs(b) {
   return typeof b.start === 'number' ? b.start : Date.parse(b.start);
@@ -36,29 +37,10 @@ async function unitFactor(entityId, ha, snapshots) {
   }
 }
 
-// Kumulierte Tageswerte (kWh) einer Komponente aus der LTS: { 'YYYY-MM-DD': cumKwh }.
-// Nutzt den echten Zählerstand `state` (Bucket-Ende), NICHT `sum`: `sum` wird von HA bei
-// 0-Aussetzern/Resets aufgebläht (jeder Rücksprung addiert den vollen Wert erneut). Zusätzlich
-// wird Monotonie erzwungen, um transiente 0-/Rückwärts-Glitches abzufangen.
+// Kumulierte Tageswerte (kWh) einer Komponente aus der LTS (monoton, glitch-sicher).
 async function componentDailyCum(entityId, startISO, endISO, ha, snapshots) {
-  const res = await ha.statisticsDuringPeriod([entityId], startISO, endISO, 'day');
-  const rows = (res && res[entityId]) || [];
   const factor = await unitFactor(entityId, ha, snapshots);
-  const pairs = [];
-  for (const r of rows) {
-    const raw = r.state != null ? r.state : r.sum; // bevorzugt Zählerstand, Fallback sum
-    if (raw == null) continue;
-    pairs.push({ date: toDateStr(new Date(bucketStartMs(r))), val: Number(raw) * factor });
-  }
-  pairs.sort((a, b) => (a.date < b.date ? -1 : 1));
-  const byDate = {};
-  let running = null;
-  for (const p of pairs) {
-    if (running == null || p.val >= running) running = p.val; // Anstieg übernehmen
-    // Rückwärts-Glitch (z.B. kurz 0) -> Stand halten
-    byDate[p.date] = running;
-  }
-  return byDate;
+  return dailyCumKwh(entityId, startISO, endISO, ha, factor);
 }
 
 // Frühestes Datum, an dem ALLE Komponenten Statistikdaten haben.
@@ -68,12 +50,22 @@ async function earliestCommonDate(components, ha, snapshots) {
   const endISO = new Date(now.getTime() + 86400000).toISOString();
   let latestOfFirsts = null;
   for (const comp of components || []) {
-    const cum = await componentDailyCum(comp.entityId, startISO, endISO, ha, snapshots);
+    let cum;
+    try {
+      cum = await componentDailyCum(comp.entityId, startISO, endISO, ha, snapshots);
+    } catch (e) {
+      console.error(`[virtual] Statistik-Fehler für ${comp.entityId}: ${e && e.message ? e.message : e}`);
+      throw new Error(`Statistik für ${comp.entityId} nicht lesbar: ${e && e.message ? e.message : e}`);
+    }
     const dates = Object.keys(cum).sort();
-    if (!dates.length) return null; // eine Komponente ohne Statistik
-    const first = dates[0];
-    if (latestOfFirsts === null || first > latestOfFirsts) latestOfFirsts = first;
+    console.log(`[virtual] ${comp.entityId}: ${dates.length} Tage Statistik, frühester ${dates[0] || '—'}, spätester ${dates[dates.length - 1] || '—'}`);
+    if (!dates.length) {
+      console.error(`[virtual] keine Statistik für ${comp.entityId} – ist Langzeitstatistik für diesen Sensor aktiv?`);
+      return null; // eine Komponente ohne Statistik
+    }
+    if (latestOfFirsts === null || dates[0] > latestOfFirsts) latestOfFirsts = dates[0];
   }
+  console.log(`[virtual] frühestes gemeinsames Datum: ${latestOfFirsts}`);
   return latestOfFirsts;
 }
 

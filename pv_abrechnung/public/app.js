@@ -312,9 +312,26 @@ async function confirmSwap(entityId, name) {
   }
 }
 
+function periodBody() {
+  const now = new Date();
+  switch ($('pType').value) {
+    case 'cur_month':
+      return { periodType: 'month', year: now.getFullYear(), month: now.getMonth() };
+    case 'prev_year':
+      return { periodType: 'year' };
+    case 'cur_year':
+      return { periodType: 'year', year: now.getFullYear() };
+    case 'yesterday':
+      return { periodType: 'day' };
+    case 'prev_month':
+    default:
+      return { periodType: 'month' };
+  }
+}
+
 async function preview() {
   try {
-    const r = await api('api/report/preview', { method: 'POST', body: JSON.stringify({ periodType: $('pType').value }) });
+    const r = await api('api/report/preview', { method: 'POST', body: JSON.stringify(periodBody()) });
     $('previewWrap').style.display = 'block';
     $('preview').srcdoc = r.html;
   } catch (e) {
@@ -325,7 +342,7 @@ async function preview() {
 async function sendNow() {
   if (!confirm('Bericht jetzt an die Empfänger versenden?')) return;
   try {
-    const r = await api('api/report/send', { method: 'POST', body: JSON.stringify({ periodType: $('pType').value }) });
+    const r = await api('api/report/send', { method: 'POST', body: JSON.stringify(periodBody()) });
     flash(`Versendet (${r.subject}), Summe ${r.total} €.`);
     loadStatus();
   } catch (e) {
