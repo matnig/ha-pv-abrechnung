@@ -71,6 +71,7 @@ async function runReport(period, opts = {}) {
   billing.stammdaten = finalized
     ? finalized.stammdaten || { anlagenName: '', betreiber: '', kunde: '' }
     : { anlagenName: config.anlagenName || '', betreiber: config.betreiber || '', kunde: config.kunde || '' };
+  billing.battery = finalized ? finalized.battery || null : loadSnapshots()._battery || null;
 
   // Beim Versand einer noch nicht abgeschlossenen Periode: Beleg vorbereiten (Prüfsumme steht dann
   // schon in der Mail); nach erfolgreichem Versand wird er ins Journal geschrieben.

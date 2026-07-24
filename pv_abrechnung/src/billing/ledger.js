@@ -33,6 +33,7 @@ function contentOf(e) {
     correction: e.correction,
     monthly: e.monthly || null,
     stammdaten: e.stammdaten || undefined, // undefined -> von JSON.stringify weggelassen (alte Belege bleiben gültig)
+    battery: e.battery || undefined,
     prevHash: e.prevHash,
   });
 }

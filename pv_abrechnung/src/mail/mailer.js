@@ -37,6 +37,23 @@ async function sendReport(config, { subject, html, csv, csvName }) {
 function alertContent(alert) {
   const when = new Date(alert.since).toLocaleString('de-DE');
   const who = alert.name || alert.entityId;
+  if (alert.kind === 'offline_investigating') {
+    return {
+      subject: `PV-Abrechnung – Sensor ausgefallen: ${who}`,
+      html: `<div style="font-family:system-ui,Arial,sans-serif;color:#222">
+        <h2>Sensor liefert keine Daten</h2>
+        <p>Der Zähler <b>${who}</b> ist seit ${when} nicht verfügbar (Sensor „unavailable" bzw. Home Assistant nicht erreichbar).
+        Bitte prüfen, ob Gerät/Bridge online ist. Abrechnungsdaten für diesen Zeitraum können fehlen.</p></div>`,
+    };
+  }
+  if (alert.kind === 'offline_fault') {
+    return {
+      subject: `PV-Abrechnung – STÖRUNG (Sensor offline): ${who}`,
+      html: `<div style="font-family:system-ui,Arial,sans-serif;color:#222">
+        <h2 style="color:#b91c1c">Störung: Sensor seit über ${Math.round((alert.ageMin || 0) / 60)} h offline</h2>
+        <p>Der Zähler <b>${who}</b> liefert seit ${when} keine Daten mehr und hat sich nicht erholt. Bitte dringend prüfen.</p></div>`,
+    };
+  }
   if (alert.kind === 'investigating') {
     return {
       subject: `PV-Abrechnung – möglicher Zählerfehler: ${who}`,

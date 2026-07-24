@@ -11,6 +11,8 @@ const ANOMALY_TEXT = {
   meter_swap: 'Zählertausch (manuell bestätigt) – virtueller Zähler läuft fort',
   technical_fault: 'STÖRUNG: Zählerabfall über 2 Std ohne Erholung – bitte prüfen',
   investigating: 'möglicher Zählerfehler – vom System untersucht',
+  offline: 'Sensor ausgefallen – keine Daten (untersucht)',
+  offline_fault: 'STÖRUNG: Sensor über 2 Std offline – bitte prüfen',
   drop_detected: 'Zählerabfall erkannt – Untersuchung läuft',
   transient: 'kurzzeitige Störung (Wert kam zurück) – kein Zählertausch',
   reset: 'Zähler-Reset (z.B. Gerät auf 0) – Stand automatisch fortgeführt',
@@ -101,6 +103,10 @@ function buildInfoStats(billing) {
   if (t.ersparnis > 0) {
     parts.push(`<div style="margin-top:10px;font-size:14px;color:#166534">💡 Ersparnis für den Kunden: <b>${eur(t.ersparnis)}</b> gegenüber Netzstrom
       (PV ${priceStr(t.lieferpreis)} statt Netz ${priceStr(t.netzpreis)} · ${kwh(t.pvKwh)}).</div>`);
+  }
+  if (billing.battery && billing.battery.value != null) {
+    parts.push(`<div style="margin-top:10px;font-size:14px">🔋 Akku-Ladestand: <b>${billing.battery.value}${esc(billing.battery.unit || '%')}</b>
+      <span style="color:#888;font-size:12px">– hilft, ruhige Zeiträume (Akku deckt die Last) von echten Zähler-Ausfällen zu unterscheiden.</span></div>`);
   }
   return parts.length ? `<h3 style="margin-top:24px">Auswertung (informativ)</h3>${parts.join('')}` : '';
 }

@@ -26,6 +26,7 @@ const DEFAULT_CONFIG = {
     netzpreis: 0, // €/kWh Netzbetreiber-Strompreis (Vergleich für Ersparnis; 0 = keine Ersparnis-Anzeige)
   },
   showInfoStats: true, // informative Statistik (Autarkiegrad, Ersparnis) im Bericht anzeigen
+  batterySensor: '', // optional: entity_id eines Akku-Ladestand-Sensors (%) für Status + Bericht
   anlagenName: '', // Name der PV-Anlage (im Betreff + Bericht + CSV)
   betreiber: '', // Anlagenbetreiber (Name/Anschrift, mehrzeilig möglich)
   kunde: '', // Kunde/Mieter (Name/Anschrift, mehrzeilig möglich)

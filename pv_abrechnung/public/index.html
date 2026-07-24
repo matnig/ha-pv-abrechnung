@@ -53,6 +53,8 @@
       <div><label>Betreiber (Name/Anschrift)</label><textarea id="betreiber" rows="3" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:14px;font-family:inherit" placeholder="Anlagenbetreiber…"></textarea></div>
       <div><label>Kunde (Name/Anschrift)</label><textarea id="kunde" rows="3" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:14px;font-family:inherit" placeholder="Kunde/Mieter…"></textarea></div>
     </div>
+    <label style="margin-top:8px">Akku-Ladestand-Sensor (optional)</label><input id="batterySensor" placeholder="z.B. sensor.batterie_soc" />
+    <div class="hint">Entity-ID eines Akku-Ladestand-Sensors (%). Wird im Status und Bericht angezeigt und <b>hilft, Fehlalarme zu erkennen</b>: Ist der Akku voll/aktiv, sind flache Zähler (kein Netzbezug/keine Einspeisung) normal – kein echter Ausfall.</div>
   </div>
 
   <div class="card">

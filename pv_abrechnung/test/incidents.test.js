@@ -51,6 +51,20 @@ test('kurzzeitige Störung vor 10 Min -> keine Mail, Störung geschlossen', asyn
   assert.strictEqual(openIncidents().length, 0, 'Störung geschlossen');
 });
 
+test('Sensor-Ausfall (unavailable) eskaliert per Mail: 10 Min + 2 Std, Erholung schließt', async () => {
+  process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'pv-off-'));
+  await pollOnce(config, { now: 0, getState: gs(150) });
+  let r = await pollOnce(config, { now: 5 * MIN, getState: gs('unavailable') });
+  assert.strictEqual(r.alerts.length, 0);
+  r = await pollOnce(config, { now: 20 * MIN, getState: gs('unavailable') });
+  assert.ok(r.alerts.some((a) => a.kind === 'offline_investigating'));
+  commitAlert('sensor.sw', 'offline_investigating', 20 * MIN);
+  r = await pollOnce(config, { now: 130 * MIN, getState: gs('unavailable') });
+  assert.ok(r.alerts.some((a) => a.kind === 'offline_fault'));
+  r = await pollOnce(config, { now: 140 * MIN, getState: gs(151) }); // Erholung
+  assert.ok(!r.alerts.some((a) => String(a.kind).startsWith('offline')));
+});
+
 test('manueller Zählertausch schließt die Störung und läuft fort', async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'pv-inc3-'));
   await pollOnce(config, { now: 0, getState: gs(150) });

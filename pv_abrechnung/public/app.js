@@ -178,6 +178,7 @@ function fillForm() {
   $('anlagenName').value = config.anlagenName || '';
   $('betreiber').value = config.betreiber || '';
   $('kunde').value = config.kunde || '';
+  $('batterySensor').value = config.batterySensor || '';
   $('sDaily').value = String(!!s.daily); $('sMonthly').value = String(!!s.monthly);
   $('sYearly').value = String(!!s.yearly); $('sHour').value = s.hour;
   $('smtpHost').value = sm.host; $('smtpPort').value = sm.port; $('smtpSecure').value = String(!!sm.secure);
@@ -203,6 +204,7 @@ function collectForm() {
   config.anlagenName = $('anlagenName').value;
   config.betreiber = $('betreiber').value;
   config.kunde = $('kunde').value;
+  config.batterySensor = $('batterySensor').value;
   config.schedule = {
     daily: $('sDaily').value === 'true', monthly: $('sMonthly').value === 'true',
     yearly: $('sYearly').value === 'true', hour: +$('sHour').value,
@@ -435,7 +437,11 @@ async function loadStatus() {
     const reports = s.reports
       .map((r) => `<li>${new Date(r.at).toLocaleString('de-DE')} – ${r.periodType} ${r.periodLabel}: ${r.total} € ${r.sent ? '✉️' : ''} ${r.error ? '⚠ ' + r.error : ''}</li>`)
       .join('');
+    const bat = s.battery && s.battery.value != null
+      ? `<div style="margin:8px 0;font-size:14px">🔋 Akku-Ladestand: <b>${s.battery.value}${s.battery.unit || '%'}</b> <span class="tag">(${agoText(s.battery.ts, s.at)})</span></div>`
+      : '';
     $('status').innerHTML =
+      bat +
       `<table><thead><tr><th>Zähler</th><th class="num">Live-Wert</th><th>zuletzt gelesen</th><th>Ausfälle (24h)</th></tr></thead><tbody>${meters}</tbody></table>` +
       (reports ? `<h3 style="font-size:13px">Letzte Berichte</h3><ul>${reports}</ul>` : '');
   } catch (e) {

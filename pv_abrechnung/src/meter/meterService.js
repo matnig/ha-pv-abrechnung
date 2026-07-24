@@ -36,6 +36,23 @@ async function pollOnce(config, opts = {}) {
   const alerts = [];
   const dayKey = toDateStr(new Date(now));
 
+  // Anhaltender Sensor-Ausfall (unavailable/HA nicht erreichbar) -> Eskalation per Mail,
+  // 10 Min „möglicher Fehler", 2 Std „Störung" (analog zum Zählerabfall).
+  const trackOffline = (entry, meter, isOutage) => {
+    if (!isOutage) {
+      entry.offline = null;
+      return;
+    }
+    if (!entry.offline) entry.offline = { since: now, name: meter.name, notifiedInvestigating: false, notifiedFault: false };
+    const ageMin = (now - entry.offline.since) / 60000;
+    if (ageMin >= investigateAfter && !entry.offline.notifiedInvestigating) {
+      alerts.push({ entityId: meter.entityId, name: meter.name, kind: 'offline_investigating', since: entry.offline.since, ageMin: Math.round(ageMin) });
+    }
+    if (ageMin >= faultAfter && !entry.offline.notifiedFault) {
+      alerts.push({ entityId: meter.entityId, name: meter.name, kind: 'offline_fault', since: entry.offline.since, ageMin: Math.round(ageMin) });
+    }
+  };
+
   for (const meter of config.meters || []) {
     if (!meter.entityId) continue;
     const entry = snap[meter.entityId] || { state: null, daily: {}, anomalies: [], incident: null };
@@ -49,8 +66,9 @@ async function pollOnce(config, opts = {}) {
       // letzten Stand behalten, Zähler überspringen, nur ins Log.
       console.warn(`[poll] ${meter.entityId} übersprungen (HA nicht erreichbar): ${err.message || err}`);
       entry.outages = (entry.outages || []).concat(now).slice(-1000); // Ausfall (HA nicht erreichbar)
+      trackOffline(entry, meter, true);
       snap[meter.entityId] = entry;
-      results.push({ entityId: meter.entityId, name: meter.name, effective: entry.lastEffective, updated: false, incident: !!entry.incident, anomalies: [] });
+      results.push({ entityId: meter.entityId, name: meter.name, effective: entry.lastEffective, updated: false, incident: !!(entry.incident || entry.offline), anomalies: [] });
       continue;
     }
 
@@ -60,6 +78,7 @@ async function pollOnce(config, opts = {}) {
     entry.unitFactor = factor;
     const available = !UNAVAILABLE.has(st.state);
     if (!available) entry.outages = (entry.outages || []).concat(now).slice(-1000); // Ausfall (Sensor unavailable)
+    trackOffline(entry, meter, !available);
     // Rohwert immer auf kWh normalisieren (Wh/MWh -> kWh), damit alle Berechnungen in kWh laufen.
     const n = Number(String(st.state).replace(',', '.'));
     const rawKwh = available && Number.isFinite(n) ? n * factor : st.state;
@@ -129,6 +148,22 @@ async function pollOnce(config, opts = {}) {
     snap[vkey] = ventry;
   }
 
+  // Optionaler Akku-Ladestand (%) – informativ für Status/Bericht.
+  if (config.batterySensor) {
+    try {
+      const st = await getState(config.batterySensor);
+      const v = Number(String(st.state).replace(',', '.'));
+      snap._battery = {
+        value: Number.isFinite(v) ? v : null,
+        unit: (st.attributes && st.attributes.unit_of_measurement) || '%',
+        name: (st.attributes && st.attributes.friendly_name) || config.batterySensor,
+        ts: now,
+      };
+    } catch {
+      /* transient -> letzten Wert behalten */
+    }
+  }
+
   saveSnapshots(snap);
   return { at: now, meters: results, alerts };
 }
@@ -137,13 +172,21 @@ async function pollOnce(config, opts = {}) {
 function commitAlert(entityId, kind, now = Date.now()) {
   const snap = loadSnapshots();
   const e = snap[entityId];
-  if (!e || !e.incident) return;
-  if (kind === 'investigating') {
+  if (!e) return;
+  if (kind === 'investigating' && e.incident) {
     e.incident.notifiedInvestigating = true;
     e.anomalies.push({ type: 'investigating', at: now, entityId, name: e.incident.name, from: e.incident.oldFinal });
-  } else if (kind === 'fault') {
+  } else if (kind === 'fault' && e.incident) {
     e.incident.notifiedFault = true;
     e.anomalies.push({ type: 'technical_fault', at: now, entityId, name: e.incident.name, from: e.incident.oldFinal });
+  } else if (kind === 'offline_investigating' && e.offline) {
+    e.offline.notifiedInvestigating = true;
+    e.anomalies.push({ type: 'offline', at: now, entityId, name: e.offline.name });
+  } else if (kind === 'offline_fault' && e.offline) {
+    e.offline.notifiedFault = true;
+    e.anomalies.push({ type: 'offline_fault', at: now, entityId, name: e.offline.name });
+  } else {
+    return;
   }
   saveSnapshots(snap);
 }

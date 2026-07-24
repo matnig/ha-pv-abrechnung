@@ -2,6 +2,16 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.27 – 2026-07-24
+
+### Akku-Ladestand + Ausfall-Benachrichtigung
+- **Akku-Ladestand (%)** optional konfigurierbar (Sensor-Feld): erscheint im **Status** und im
+  **Bericht** und **hilft, Fehlalarme zu erkennen** (Akku deckt Last → flache Zähler sind normal).
+  Wird im Beleg mit eingefroren.
+- **Sensor-Ausfall löst jetzt eine Mail aus** (10 Min „möglicher Fehler", 2 Std „Störung") – analog
+  zum Zählerabfall. Bisher gab es bei „Sensor nicht verfügbar / HA nicht erreichbar" KEINE Mail,
+  nur einen Eintrag im Bericht/Status. Das war die fehlende Benachrichtigung.
+
 ## 0.1.26 – 2026-07-24
 
 ### Behoben: Fehlalarm „Wert stand still"

@@ -82,7 +82,7 @@ function createServer() {
         recentAnomalies: (e.anomalies || []).filter((a) => (a.at || 0) >= hour).slice(-5),
       };
     });
-    res.json({ at: now, meters, reports: readJson('reports.json', []).slice(-20).reverse() });
+    res.json({ at: now, meters, battery: snap._battery || null, reports: readJson('reports.json', []).slice(-20).reverse() });
   });
 
   app.post('/api/poll', async (req, res) => {
