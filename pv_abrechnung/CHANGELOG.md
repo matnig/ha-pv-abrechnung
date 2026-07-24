@@ -2,6 +2,15 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.19 – 2026-07-24
+
+- **Grafik in jeder Bericht-Mail:** „Mengen im Überblick" mit Balken je Zähler (E-Mail-robust, kein Bild/SVG).
+- **Fußzeile / Impressum** je Bericht: frei ausfüllbares Textfeld in der UI (z.B. „Ein Service von … ·
+  bei Fragen auf diese Mail antworten"). Bleibt in `/data`, nicht im öffentlichen Code.
+- **Deutsche Formatierung behoben:** `icu-data-full` im Image – Datum (24.07.2026 statt 07/24/2026),
+  Monatsnamen (Juli statt June) und Währung erscheinen jetzt korrekt auf Deutsch.
+- Grammatik: „das Jahr läuft noch" (statt „der Jahr").
+
 ## 0.1.18 – 2026-07-24
 
 ### Status aussagekräftiger

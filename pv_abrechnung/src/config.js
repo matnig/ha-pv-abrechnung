@@ -26,6 +26,7 @@ const DEFAULT_CONFIG = {
   },
   recipients: [], // Empfänger der Abrechnungs-Reports
   alertRecipients: [], // Empfänger der Störungs-/Untersuchungsmails (leer -> wie recipients)
+  reportFooter: '', // frei ausfüllbare Fußzeile/Impressum unter jedem Bericht (bleibt in /data, nicht im Repo)
   smtp: { host: '', port: 587, secure: false, user: '', pass: '', from: '' },
   schedule: { daily: false, monthly: true, yearly: true, hour: 6 },
   meterCfg: {
@@ -53,6 +54,7 @@ function loadConfig() {
     ...cfg,
     virtualMeters: cfg.virtualMeters || [],
     alertRecipients: cfg.alertRecipients || [],
+    reportFooter: cfg.reportFooter || '',
     useStatistics: cfg.useStatistics !== false,
     tariffs: { ...DEFAULT_CONFIG.tariffs, ...(cfg.tariffs || {}) },
     smtp: { ...DEFAULT_CONFIG.smtp, ...(cfg.smtp || {}) },

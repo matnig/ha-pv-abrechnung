@@ -60,15 +60,34 @@ function buildMonthlyBreakdown(billing) {
     </table>`;
 }
 
+function buildMeterChart(billing) {
+  const lines = (billing.lines || []).filter((l) => l.kwh != null && l.kwh !== 0);
+  if (!lines.length) return '';
+  const max = Math.max(1, ...lines.map((l) => Math.abs(l.kwh)));
+  const rows = lines
+    .map((l) => {
+      const w = Math.round((Math.abs(l.kwh) / max) * 100);
+      return `<tr>
+        <td style="padding:3px 8px;font-size:13px">${esc(l.name)}</td>
+        <td style="padding:3px 8px;text-align:right;font-size:13px;white-space:nowrap">${kwh(l.kwh)}</td>
+        <td style="padding:3px 8px;width:55%"><div style="background:#eef2ff;border-radius:3px"><div style="background:#2563eb;width:${w}%;height:14px;border-radius:3px"></div></div></td>
+      </tr>`;
+    })
+    .join('');
+  return `<h3 style="margin-top:20px">Mengen im Überblick</h3>
+    <table style="border-collapse:collapse;width:100%">${rows}</table>`;
+}
+
 function buildHtml(billing) {
   const p = billing.period;
   const t = billing.totals;
   const incomplete = p.end.getTime() > (billing.generatedAt || Date.now());
   const periodWord = { day: 'Tag', month: 'Monat', year: 'Jahr' }[p.type] || 'Zeitraum';
+  const periodArticle = { day: 'der', month: 'der', year: 'das' }[p.type] || 'der';
   const incompleteBanner = incomplete
     ? `<div style="background:#fee2e2;border:2px solid #dc2626;border-radius:8px;padding:12px;margin:12px 0;text-align:center">
          <div style="color:#dc2626;font-size:22px;font-weight:800">⚠ ${periodWord} nicht abgeschlossen</div>
-         <div style="color:#7f1d1d;font-size:13px;margin-top:4px">Vorläufige Werte, Stand ${fmt(new Date(billing.generatedAt))} – der ${periodWord} läuft noch.</div>
+         <div style="color:#7f1d1d;font-size:13px;margin-top:4px">Vorläufige Werte, Stand ${fmt(new Date(billing.generatedAt))} – ${periodArticle} ${periodWord} läuft noch.</div>
        </div>`
     : '';
   const monthlyHtml = buildMonthlyBreakdown(billing);
@@ -146,9 +165,17 @@ function buildHtml(billing) {
         t.total
       )}</b></td></tr>
     </table>
+    ${buildMeterChart(billing)}
     ${monthlyHtml}
     ${anomalyRows}
-    <p style="color:#aaa;font-size:11px;margin-top:24px">Erstellt am ${new Date(
+    ${
+      billing.footer
+        ? `<div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;color:#444;font-size:13px;line-height:1.5">${esc(
+            billing.footer
+          ).replace(/\n/g, '<br>')}</div>`
+        : ''
+    }
+    <p style="color:#aaa;font-size:11px;margin-top:16px">Erstellt am ${new Date(
       billing.generatedAt
     ).toLocaleString('de-DE')} · Zählerstände sind bereinigte, monoton fortgeführte Werte.</p>
   </body></html>`;

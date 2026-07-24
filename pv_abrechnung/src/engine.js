@@ -47,6 +47,7 @@ async function runReport(period, opts = {}) {
     }
   }
 
+  billing.footer = (config.reportFooter || '').trim();
   const html = buildHtml(billing);
   const csv = buildCsv(billing);
   const subj = subject(billing);

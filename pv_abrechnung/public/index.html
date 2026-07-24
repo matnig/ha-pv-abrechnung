@@ -152,6 +152,9 @@
     <label>Empfänger Reports (Komma-getrennt)</label><input id="recipients" placeholder="kunde@example.com, ..." />
     <label>Empfänger Störungs-/Untersuchungsmails</label><input id="alertRecipients" placeholder="leer = wie oben" />
     <div class="hint">Störungsmails (10 Min „wird untersucht", 2 Std „Störung") gehen hierhin – i.d.R. an dich als Betreuer, nicht an den Kunden.</div>
+    <label style="margin-top:10px">Fußzeile / Impressum unter jedem Bericht</label>
+    <textarea id="reportFooter" rows="3" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:14px;font-family:inherit" placeholder="z.B. Ein Service von … · Bei Fragen einfach auf diese Mail antworten."></textarea>
+    <div class="hint">Frei ausfüllbarer Text (mehrzeilig), erscheint unten in jeder Bericht-Mail. Bleibt nur bei dir gespeichert (nicht im öffentlichen Code). Antworten auf die Mail gehen automatisch an deine Absenderadresse.</div>
     <div class="grid3" style="margin-top:6px">
       <div><label>tägl. Bericht</label><select id="sDaily"><option value="false">aus</option><option value="true">an</option></select></div>
       <div><label>monatl. Bericht</label><select id="sMonthly"><option value="true">an</option><option value="false">aus</option></select></div>
