@@ -2,6 +2,11 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.23 – 2026-07-24
+
+- Test-Bump zur Bestätigung der Store-Cache-Verzögerung im Supervisor (HA zeigt „neueste Version"
+  konstant eine Stufe zurück). Inhaltlich identisch mit 0.1.22.
+
 ## 0.1.22 – 2026-07-24
 
 ### Abrechnungs-Integrität (manipulationssicher)
