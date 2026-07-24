@@ -56,15 +56,24 @@ function createServer() {
 
   app.get('/api/status', (req, res) => {
     const snap = loadSnapshots();
-    const cutoff = Date.now() - 60 * 60 * 1000; // nur Auffälligkeiten der letzten Stunde zeigen
-    const meters = Object.entries(snap).map(([entityId, e]) => ({
-      entityId,
-      lastEffective: e.lastEffective,
-      lastTs: e.lastTs,
-      days: Object.keys(e.daily || {}).length,
-      recentAnomalies: (e.anomalies || []).filter((a) => (a.at || 0) >= cutoff).slice(-5),
-    }));
-    res.json({ meters, reports: readJson('reports.json', []).slice(-20).reverse() });
+    const now = Date.now();
+    const day = now - 24 * 60 * 60 * 1000;
+    const hour = now - 60 * 60 * 1000;
+    const meters = Object.entries(snap).map(([entityId, e]) => {
+      const outages = (e.outages || []).filter((t) => t >= day);
+      return {
+        entityId,
+        isVirtual: !!e.isVirtual,
+        lastEffective: e.lastEffective,
+        lastTs: e.lastTs,
+        unit: e.unit || 'kWh',
+        days: Object.keys(e.daily || {}).length,
+        outages24h: outages.length,
+        lastOutage: outages.length ? outages[outages.length - 1] : null,
+        recentAnomalies: (e.anomalies || []).filter((a) => (a.at || 0) >= hour).slice(-5),
+      };
+    });
+    res.json({ at: now, meters, reports: readJson('reports.json', []).slice(-20).reverse() });
   });
 
   app.post('/api/poll', async (req, res) => {

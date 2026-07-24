@@ -2,6 +2,13 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.18 – 2026-07-24
+
+### Status aussagekräftiger
+- Zeigt jetzt je Zähler den **Live-Wert** (aktueller Stand + Einheit), **„zuletzt gelesen"** (wie
+  aktuell) und die **Anzahl Ausfälle in den letzten 24 h** (HA nicht erreichbar oder Sensor
+  unavailable), inkl. Zeitpunkt des letzten Ausfalls. 0 Ausfälle = grünes „✓".
+
 ## 0.1.17 – 2026-07-24
 
 - **Status zeigt nur noch aktuelle Auffälligkeiten (letzte Stunde).** Alte „error/unavailable"-Einträge

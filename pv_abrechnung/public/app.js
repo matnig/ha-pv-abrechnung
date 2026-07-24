@@ -354,18 +354,32 @@ async function sendNow() {
   }
 }
 
+function agoText(ts, nowRef) {
+  if (!ts) return '–';
+  const min = Math.round(((nowRef || Date.now()) - ts) / 60000);
+  if (min < 1) return 'gerade eben';
+  if (min < 60) return `vor ${min} min`;
+  const h = Math.floor(min / 60);
+  return h < 48 ? `vor ${h} h` : `vor ${Math.floor(h / 24)} Tagen`;
+}
+
 async function loadStatus() {
   try {
     const s = await api('api/status');
     const meters = s.meters
-      .map((m) => `<tr><td>${m.entityId}</td><td>${m.lastEffective ?? '–'}</td><td>${m.days} Tage</td>
-        <td>${m.recentAnomalies.map((a) => a.type).join(', ') || '✓'}</td></tr>`)
+      .map((m) => {
+        const val = m.lastEffective != null ? m.lastEffective.toLocaleString('de-DE', { maximumFractionDigits: 2 }) + ' ' + (m.unit || 'kWh') : '–';
+        const out = m.outages24h > 0
+          ? `<span style="color:#dc2626">${m.outages24h}× (zuletzt ${agoText(m.lastOutage, s.at)})</span>`
+          : '<span style="color:#16a34a">0 ✓</span>';
+        return `<tr><td>${m.isVirtual ? '∑ ' : ''}${m.entityId}</td><td class="num"><b>${val}</b></td><td>${agoText(m.lastTs, s.at)}</td><td>${out}</td></tr>`;
+      })
       .join('');
     const reports = s.reports
       .map((r) => `<li>${new Date(r.at).toLocaleString('de-DE')} – ${r.periodType} ${r.periodLabel}: ${r.total} € ${r.sent ? '✉️' : ''} ${r.error ? '⚠ ' + r.error : ''}</li>`)
       .join('');
     $('status').innerHTML =
-      `<table><thead><tr><th>Zähler</th><th>Stand</th><th>Historie</th><th>Auffälligkeiten</th></tr></thead><tbody>${meters}</tbody></table>` +
+      `<table><thead><tr><th>Zähler</th><th class="num">Live-Wert</th><th>zuletzt gelesen</th><th>Ausfälle (24h)</th></tr></thead><tbody>${meters}</tbody></table>` +
       (reports ? `<h3 style="font-size:13px">Letzte Berichte</h3><ul>${reports}</ul>` : '');
   } catch (e) {
     $('status').textContent = 'Status nicht verfügbar: ' + e.message;

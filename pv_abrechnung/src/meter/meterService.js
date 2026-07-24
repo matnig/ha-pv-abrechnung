@@ -48,6 +48,7 @@ async function pollOnce(config, opts = {}) {
       // "unavailable"-Markierung und NICHT in die Auffälligkeiten schreiben (transient/erwartet):
       // letzten Stand behalten, Zähler überspringen, nur ins Log.
       console.warn(`[poll] ${meter.entityId} übersprungen (HA nicht erreichbar): ${err.message || err}`);
+      entry.outages = (entry.outages || []).concat(now).slice(-1000); // Ausfall (HA nicht erreichbar)
       snap[meter.entityId] = entry;
       results.push({ entityId: meter.entityId, name: meter.name, effective: entry.lastEffective, updated: false, incident: !!entry.incident, anomalies: [] });
       continue;
@@ -58,6 +59,7 @@ async function pollOnce(config, opts = {}) {
     entry.unit = unit;
     entry.unitFactor = factor;
     const available = !UNAVAILABLE.has(st.state);
+    if (!available) entry.outages = (entry.outages || []).concat(now).slice(-1000); // Ausfall (Sensor unavailable)
     // Rohwert immer auf kWh normalisieren (Wh/MWh -> kWh), damit alle Berechnungen in kWh laufen.
     const n = Number(String(st.state).replace(',', '.'));
     const rawKwh = available && Number.isFinite(n) ? n * factor : st.state;
