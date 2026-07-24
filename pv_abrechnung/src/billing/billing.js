@@ -77,6 +77,17 @@ function computeBilling(config, resolved, period, snapshots = {}) {
     Object.values(amountByRole).reduce((s, v) => s + v, 0) + grundgebuehr - einspeiseManagement
   );
 
+  // Informative Statistik: Autarkiegrad (PV-Anteil am Verbrauch) und Ersparnis ggü. Netzstrom.
+  const pvKwh = kwhByRole.lieferung || 0; // vom Kunden verbrauchter PV-Strom
+  const netzKwh = kwhByRole.netzbezug || 0; // aus dem Netz bezogen (wenn PV nicht reicht)
+  const gesamtKwh = round2(pvKwh + netzKwh);
+  const autarkie = gesamtKwh > 0 ? Math.round((pvKwh / gesamtKwh) * 100) : null;
+  const netzpreis = Number(tariffs.netzpreis || 0);
+  const lieferpreis = Number(tariffs.lieferung || 0);
+  // Ersparnis = der Kunde kauft PV-Strom (lieferpreis) statt Netzstrom (netzpreis) -> Differenz je kWh.
+  const ersparnis = netzpreis > 0 && netzpreis > lieferpreis ? round2((netzpreis - lieferpreis) * pvKwh) : 0;
+  const info = { pvKwh, netzKwh, gesamtKwh, autarkie, ersparnis, netzpreis, lieferpreis };
+
   // Anomalien im Zeitraum (aus den Polling-Snapshots)
   const startMs = period.start.getTime();
   const endMs = period.end.getTime();
@@ -92,7 +103,7 @@ function computeBilling(config, resolved, period, snapshots = {}) {
     period,
     generatedAt: Date.now(),
     lines,
-    totals: { kwhByRole, amountByRole, grundgebuehr, einspeiseManagement, total },
+    totals: { kwhByRole, amountByRole, grundgebuehr, einspeiseManagement, total, ...info },
     anomalies,
   };
 }

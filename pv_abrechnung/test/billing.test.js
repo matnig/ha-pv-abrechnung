@@ -64,6 +64,25 @@ test('Fall 2: Kunde bekommt VergÃ¼tung -> Einspeisung berechnet + ManagementgebÃ
   assert.strictEqual(b.totals.total, 58); // 60 + 8 - 10
 });
 
+test('Auswertung: Autarkiegrad und Ersparnis', () => {
+  const cfg = {
+    meters: [{ id: 'n', name: 'Netzbezug', entityId: 's.n', role: 'netzbezug' }],
+    virtualMeters: [{ id: 'v', name: 'Geliefert', role: 'lieferung' }],
+    tariffs: { lieferung: 0.3, netzpreis: 0.4 },
+  };
+  const res = { n: { meterId: 'n', role: 'netzbezug', kwh: 50, warnings: [] }, v: { meterId: 'v', role: 'lieferung', kwh: 150, warnings: [] } };
+  const b = computeBilling(cfg, res, monthPeriod(2026, 6));
+  assert.strictEqual(b.totals.gesamtKwh, 200);
+  assert.strictEqual(b.totals.autarkie, 75); // 150/200
+  assert.strictEqual(b.totals.ersparnis, 15); // (0.40-0.30)*150
+});
+
+test('keine Ersparnis ohne Netzpreis', () => {
+  const cfg = { meters: [], virtualMeters: [{ id: 'v', name: 'Geliefert', role: 'lieferung' }], tariffs: { lieferung: 0.3 } };
+  const b = computeBilling(cfg, { v: { meterId: 'v', role: 'lieferung', kwh: 100, warnings: [] } }, monthPeriod(2026, 6));
+  assert.strictEqual(b.totals.ersparnis, 0);
+});
+
 test('erzeugung ist informativ (kein Geldbetrag)', () => {
   const cfg = { meters: [{ id: 'p', name: 'PV', entityId: 'sensor.pv', role: 'erzeugung' }], tariffs: { grundgebuehr: 0 } };
   const b = computeBilling(cfg, { p: { meterId: 'p', role: 'erzeugung', kwh: 500, warnings: [] } }, monthPeriod(2026, 6));

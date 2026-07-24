@@ -40,6 +40,12 @@
   <div id="msg" class="msg"></div>
 
   <div class="card">
+    <h2>🧭 Einrichtungshilfe (einfach)</h2>
+    <p class="mini">Beantworte ein paar Ja/Nein-Fragen – die passenden Einstellungen werden automatisch gesetzt. Unten kannst du alles trotzdem im Detail anpassen. Zum Schluss unten <b>„Speichern"</b>.</p>
+    <div id="wizard"></div>
+  </div>
+
+  <div class="card">
     <h2>Zähler</h2>
     <div id="meters"></div>
     <div class="row" style="margin-top:10px">
@@ -109,7 +115,11 @@
       </div>
       <div>
         <label>Netzbezug €/kWh</label><input id="tNetzbezug" type="number" step="0.001" />
-        <div class="hint">Preis je kWh, die aus dem öffentlichen Netz bezogen wurde.</div>
+        <div class="hint">Preis je kWh, die der Kunde aus dem öffentlichen Netz bezogen hat (Netzbezugs-Zähler).</div>
+      </div>
+      <div>
+        <label>Netzbetreiber-Strompreis €/kWh</label><input id="tNetzpreis" type="number" step="0.001" />
+        <div class="hint">Nur für die <b>Ersparnis-Anzeige</b>: Preis, den der Kunde beim Netzbetreiber zahlen würde. Die Ersparnis = (dieser Preis − Lieferpreis) × gelieferte PV-kWh. 0 = keine Ersparnis-Anzeige.</div>
       </div>
       <div>
         <label>Einspeisung €/kWh</label><input id="tEinspeisung" type="number" step="0.001" />

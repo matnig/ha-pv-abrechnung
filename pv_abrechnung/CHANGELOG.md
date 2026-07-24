@@ -2,6 +2,20 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.20 – 2026-07-24
+
+### Auswertung, Transparenz & Einrichtungshilfe
+- **Informative Auswertung im Bericht** (wenn Netzbezug vorhanden): **Autarkiegrad** (PV- vs.
+  Netz-Anteil, mit Balken) und **Ersparnis für den Kunden** gegenüber Netzstrom (falls
+  Netzbetreiber-Strompreis eingetragen).
+- **Preise & Vergütung (Transparenz)** in jeder Mail: die eingetragenen Preise und der Hinweis,
+  **wer die Einspeisevergütung bekommt** (Betreiber oder Kunde).
+- Neues Tarif-Feld **Netzbetreiber-Strompreis €/kWh** (für die Ersparnis-Anzeige).
+- **Einrichtungshilfe (Ja/Nein-Wizard)** ganz oben: einfache Fragen setzen die passenden
+  Einstellungen automatisch.
+- **Status zeigt jetzt alle konfigurierten Zähler** (auch neu angelegte vor dem ersten Abruf:
+  „noch nicht gelesen").
+
 ## 0.1.19 – 2026-07-24
 
 - **Grafik in jeder Bericht-Mail:** „Mengen im Überblick" mit Balken je Zähler (E-Mail-robust, kein Bild/SVG).

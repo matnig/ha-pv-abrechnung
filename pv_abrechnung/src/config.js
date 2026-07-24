@@ -23,7 +23,9 @@ const DEFAULT_CONFIG = {
     grundgebuehr: 0, // € pauschal pro Abrechnungsperiode
     einspeisungAnBetreiber: true, // true: Betreiber bekommt Einspeisevergütung -> in Rechnung ignoriert
     einspeiseManagementJahr: 0, // €/Jahr Einspeisemanagement-Gebühr (nur Fall 2, anteilig abgezogen)
+    netzpreis: 0, // €/kWh Netzbetreiber-Strompreis (Vergleich für Ersparnis; 0 = keine Ersparnis-Anzeige)
   },
+  showInfoStats: true, // informative Statistik (Autarkiegrad, Ersparnis) im Bericht anzeigen
   recipients: [], // Empfänger der Abrechnungs-Reports
   alertRecipients: [], // Empfänger der Störungs-/Untersuchungsmails (leer -> wie recipients)
   reportFooter: '', // frei ausfüllbare Fußzeile/Impressum unter jedem Bericht (bleibt in /data, nicht im Repo)

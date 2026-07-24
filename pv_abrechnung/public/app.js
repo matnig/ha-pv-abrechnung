@@ -170,6 +170,8 @@ function fillForm() {
   $('tLieferung').value = t.lieferung ?? 0;
   $('tEinspBetreiber').checked = t.einspeisungAnBetreiber !== false;
   $('tEinspMgmt').value = t.einspeiseManagementJahr ?? 0;
+  $('tNetzpreis').value = t.netzpreis ?? 0;
+  renderWizard();
   $('recipients').value = (config.recipients || []).join(', ');
   $('alertRecipients').value = (config.alertRecipients || []).join(', ');
   $('reportFooter').value = config.reportFooter || '';
@@ -190,6 +192,7 @@ function collectForm() {
     lieferung: +$('tLieferung').value,
     einspeisungAnBetreiber: $('tEinspBetreiber').checked,
     einspeiseManagementJahr: +$('tEinspMgmt').value,
+    netzpreis: +$('tNetzpreis').value,
   };
   config.recipients = $('recipients').value.split(',').map((x) => x.trim()).filter(Boolean);
   config.alertRecipients = $('alertRecipients').value.split(',').map((x) => x.trim()).filter(Boolean);
@@ -203,6 +206,45 @@ function collectForm() {
     user: $('smtpUser').value, pass: $('smtpPass').value, from: $('smtpFrom').value,
   };
   config.useStatistics = $('useStats').checked;
+}
+
+// ---- Einrichtungshilfe (Ja/Nein-Wizard) ----
+function wizBtn(label, active, onclick) {
+  return `<button class="${active ? '' : 'sec'}" style="min-width:64px" onclick="${onclick}">${label}</button>`;
+}
+function renderWizard() {
+  if (!config) return;
+  config.tariffs = config.tariffs || {};
+  const einsp = config.tariffs.einspeisungAnBetreiber !== false;
+  const info = config.showInfoStats !== false;
+  $('wizard').innerHTML =
+    `<div style="margin:8px 0;padding-bottom:10px;border-bottom:1px solid var(--line)">
+      <div><b>1. Bekommst DU (Anlagenbetreiber) die Einspeisevergütung vom Netzbetreiber?</b></div>
+      <div class="hint">Ja = der überschüssige, ins Netz eingespeiste Strom ist deine Einnahme und taucht in der Kundenrechnung nicht auf. Nein = der Kunde bekommt die Vergütung, dann wird ihm die Einspeisemenge berechnet und dir die Einspeisemanagement-Gebühr abgezogen.</div>
+      <div style="margin-top:6px;display:flex;gap:8px">${wizBtn('Ja', einsp, 'wizEinsp(true)')}${wizBtn('Nein', !einsp, 'wizEinsp(false)')}</div>
+    </div>
+    <div style="margin:8px 0;padding-bottom:10px;border-bottom:1px solid var(--line)">
+      <div><b>2. Soll der Bericht die Ersparnis des Kunden gegenüber Netzstrom zeigen?</b></div>
+      <div class="hint">Ja = im Bericht erscheinen Autarkiegrad (PV-Anteil) und die Ersparnis. Dafür unten bei den Tarifen den „Netzbetreiber-Strompreis" eintragen.</div>
+      <div style="margin-top:6px;display:flex;gap:8px">${wizBtn('Ja', info, 'wizInfo(true)')}${wizBtn('Nein', !info, 'wizInfo(false)')}</div>
+    </div>
+    <div style="margin:8px 0">
+      <div><b>3. Zieht der Kunde auch Strom aus dem öffentlichen Netz (wenn die PV nicht reicht)?</b></div>
+      <div class="hint">Wenn ja: oben unter „Zähler" den Netzbezugs-Zähler mit Rolle <b>„Netzbezug"</b> anlegen und bei den Tarifen den Netzbezug-Preis eintragen. Nur dann lassen sich Autarkiegrad und Ersparnis berechnen.</div>
+    </div>
+    <p class="mini">Nicht vergessen: unten <b>„Speichern"</b>.</p>`;
+}
+function wizEinsp(v) {
+  config.tariffs = config.tariffs || {};
+  config.tariffs.einspeisungAnBetreiber = v;
+  $('tEinspBetreiber').checked = v;
+  renderWizard();
+  flash(v ? 'Eingestellt: du bekommst die Einspeisevergütung (nicht auf der Kundenrechnung).' : 'Eingestellt: der Kunde bekommt die Vergütung (wird ihm berechnet).');
+}
+function wizInfo(v) {
+  config.showInfoStats = v;
+  renderWizard();
+  flash(v ? 'Auswertung (Autarkie/Ersparnis) wird im Bericht angezeigt.' : 'Auswertung ausgeblendet.');
 }
 
 const fmtEur = (n) => (n == null ? '–' : n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }));
@@ -370,11 +412,15 @@ async function loadStatus() {
     const s = await api('api/status');
     const meters = s.meters
       .map((m) => {
-        const val = m.lastEffective != null ? m.lastEffective.toLocaleString('de-DE', { maximumFractionDigits: 2 }) + ' ' + (m.unit || 'kWh') : '–';
-        const out = m.outages24h > 0
-          ? `<span style="color:#dc2626">${m.outages24h}× (zuletzt ${agoText(m.lastOutage, s.at)})</span>`
-          : '<span style="color:#16a34a">0 ✓</span>';
-        return `<tr><td>${m.isVirtual ? '∑ ' : ''}${m.entityId}</td><td class="num"><b>${val}</b></td><td>${agoText(m.lastTs, s.at)}</td><td>${out}</td></tr>`;
+        const val = m.lastEffective != null
+          ? m.lastEffective.toLocaleString('de-DE', { maximumFractionDigits: 2 }) + ' ' + (m.unit || 'kWh')
+          : m.polled ? '–' : '<span style="color:#999">noch nicht gelesen</span>';
+        const out = !m.polled
+          ? '<span style="color:#999">–</span>'
+          : m.outages24h > 0
+            ? `<span style="color:#dc2626">${m.outages24h}× (zuletzt ${agoText(m.lastOutage, s.at)})</span>`
+            : '<span style="color:#16a34a">0 ✓</span>';
+        return `<tr><td>${m.isVirtual ? '∑ ' : ''}${m.name}<div class="tag">${m.entityId}</div></td><td class="num"><b>${val}</b></td><td>${m.polled ? agoText(m.lastTs, s.at) : '–'}</td><td>${out}</td></tr>`;
       })
       .join('');
     const reports = s.reports

@@ -78,6 +78,49 @@ function buildMeterChart(billing) {
     <table style="border-collapse:collapse;width:100%">${rows}</table>`;
 }
 
+const priceStr = (v) => Number(v || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' €/kWh';
+
+function buildInfoStats(billing) {
+  if (!billing.showInfoStats) return '';
+  const t = billing.totals;
+  const parts = [];
+  if (t.gesamtKwh > 0 && t.autarkie != null) {
+    const pv = t.autarkie;
+    const netz = 100 - pv;
+    parts.push(`
+      <div style="margin-top:8px">
+        <div style="font-size:14px">Autarkiegrad: <b>${pv}%</b> des Verbrauchs kam aus der PV-Anlage.</div>
+        <div style="display:flex;height:22px;border-radius:4px;overflow:hidden;margin-top:6px;font-size:11px;color:#fff">
+          <div style="background:#16a34a;width:${pv}%;text-align:center;line-height:22px">${pv > 12 ? 'PV ' + pv + '%' : ''}</div>
+          <div style="background:#9ca3af;width:${netz}%;text-align:center;line-height:22px">${netz > 12 ? 'Netz ' + netz + '%' : ''}</div>
+        </div>
+        <div style="font-size:12px;color:#555;margin-top:4px">Aus PV: ${kwh(t.pvKwh)} · Aus Netz: ${kwh(t.netzKwh)} · Gesamt: ${kwh(t.gesamtKwh)}</div>
+      </div>`);
+  }
+  if (t.ersparnis > 0) {
+    parts.push(`<div style="margin-top:10px;font-size:14px;color:#166534">💡 Ersparnis für den Kunden: <b>${eur(t.ersparnis)}</b> gegenüber Netzstrom
+      (PV ${priceStr(t.lieferpreis)} statt Netz ${priceStr(t.netzpreis)} · ${kwh(t.pvKwh)}).</div>`);
+  }
+  return parts.length ? `<h3 style="margin-top:24px">Auswertung (informativ)</h3>${parts.join('')}` : '';
+}
+
+function buildPriceTransparency(billing) {
+  const tf = billing.tariffs;
+  if (!tf) return '';
+  const rows = [['Preis Lieferung (PV an Kunde)', priceStr(tf.lieferung)]];
+  if (Number(tf.netzbezug)) rows.push(['Preis Netzbezug', priceStr(tf.netzbezug)]);
+  if (Number(tf.netzpreis)) rows.push(['Netzbetreiber-Strompreis (Vergleich)', priceStr(tf.netzpreis)]);
+  if (Number(tf.grundgebuehr)) rows.push(['Grundgebühr', eur(Number(tf.grundgebuehr)) + ' / Periode']);
+  const einsp =
+    tf.einspeisungAnBetreiber !== false
+      ? 'Die Einspeisevergütung für den ins Netz eingespeisten Strom erhält der Anlagenbetreiber (nicht in der Kundenrechnung).'
+      : `Die Einspeisevergütung erhält der Kunde; die eingespeiste Menge wird ihm zum Satz ${priceStr(tf.einspeisung)} berechnet.`;
+  const trs = rows.map(([k, v]) => `<tr><td style="padding:3px 8px;color:#555">${esc(k)}</td><td style="padding:3px 8px;text-align:right">${esc(v)}</td></tr>`).join('');
+  return `<h3 style="margin-top:24px">Preise & Vergütung (Transparenz)</h3>
+    <table style="border-collapse:collapse;font-size:13px">${trs}</table>
+    <div style="font-size:13px;color:#555;margin-top:6px">${esc(einsp)}</div>`;
+}
+
 function buildHtml(billing) {
   const p = billing.period;
   const t = billing.totals;
@@ -166,6 +209,8 @@ function buildHtml(billing) {
       )}</b></td></tr>
     </table>
     ${buildMeterChart(billing)}
+    ${buildInfoStats(billing)}
+    ${buildPriceTransparency(billing)}
     ${monthlyHtml}
     ${anomalyRows}
     ${
@@ -202,6 +247,16 @@ function buildCsv(billing) {
   }
   if (billing.totals.einspeiseManagement) out.push(`"Einspeisemanagement (anteilig)";;;;;;;"-${billing.totals.einspeiseManagement}";`);
   out.push(`"Summe";;;;;;;"${billing.totals.total}";`);
+
+  const t = billing.totals;
+  if (billing.showInfoStats && (t.autarkie != null || t.ersparnis)) {
+    out.push('');
+    out.push(csvCell('Auswertung'));
+    if (t.autarkie != null) out.push([csvCell('Autarkiegrad_%'), csvCell(t.autarkie)].join(';'));
+    out.push([csvCell('Aus_PV_kWh'), csvCell(t.pvKwh)].join(';'));
+    out.push([csvCell('Aus_Netz_kWh'), csvCell(t.netzKwh)].join(';'));
+    if (t.ersparnis) out.push([csvCell('Ersparnis_EUR'), csvCell(t.ersparnis)].join(';'));
+  }
 
   // Jahresbericht: Monatsübersicht anhängen
   if (billing.monthly && billing.monthly.length) {

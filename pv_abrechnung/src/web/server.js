@@ -56,18 +56,26 @@ function createServer() {
 
   app.get('/api/status', (req, res) => {
     const snap = loadSnapshots();
+    const config = loadConfig();
     const now = Date.now();
     const day = now - 24 * 60 * 60 * 1000;
     const hour = now - 60 * 60 * 1000;
-    const meters = Object.entries(snap).map(([entityId, e]) => {
+    // Alle KONFIGURIERTEN Zähler anzeigen (auch wenn noch nicht gepollt), plus virtuelle.
+    const items = [
+      ...(config.meters || []).map((m) => ({ key: m.entityId, name: m.name, virtual: false })),
+      ...(config.virtualMeters || []).map((v) => ({ key: 'virtual:' + v.id, name: v.name, virtual: true })),
+    ];
+    const meters = items.map((it) => {
+      const e = snap[it.key] || {};
       const outages = (e.outages || []).filter((t) => t >= day);
       return {
-        entityId,
-        isVirtual: !!e.isVirtual,
-        lastEffective: e.lastEffective,
-        lastTs: e.lastTs,
+        entityId: it.key,
+        name: it.name,
+        isVirtual: it.virtual,
+        polled: e.lastTs != null,
+        lastEffective: e.lastEffective ?? null,
+        lastTs: e.lastTs ?? null,
         unit: e.unit || 'kWh',
-        days: Object.keys(e.daily || {}).length,
         outages24h: outages.length,
         lastOutage: outages.length ? outages[outages.length - 1] : null,
         recentAnomalies: (e.anomalies || []).filter((a) => (a.at || 0) >= hour).slice(-5),

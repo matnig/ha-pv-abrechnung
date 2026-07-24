@@ -48,6 +48,8 @@ async function runReport(period, opts = {}) {
   }
 
   billing.footer = (config.reportFooter || '').trim();
+  billing.tariffs = config.tariffs || {};
+  billing.showInfoStats = config.showInfoStats !== false;
   const html = buildHtml(billing);
   const csv = buildCsv(billing);
   const subj = subject(billing);
