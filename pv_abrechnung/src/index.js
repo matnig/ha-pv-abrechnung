@@ -3,9 +3,22 @@
 const { createServer } = require('./web/server');
 const { loadConfig, pollIntervalMinutes } = require('./config');
 const { runPoll } = require('./engine');
+const haClient = require('./ha/haClient');
 const scheduler = require('./scheduler/scheduler');
 
 const PORT = Number(process.env.INGRESS_PORT) || 8099;
+
+// Einmaliger Selbsttest der HA-API beim Start – schreibt das Ergebnis klar ins Protokoll,
+// damit Verbindungs-/Berechtigungsprobleme sofort sichtbar sind (ohne Klick in der UI).
+async function haSelfCheck() {
+  console.log(`[startup] SUPERVISOR_TOKEN vorhanden: ${process.env.SUPERVISOR_TOKEN ? 'ja' : 'NEIN'} · API-Basis: ${haClient.httpBase()}`);
+  try {
+    const list = await haClient.listEnergyEntities();
+    console.log(`[startup] HA-API OK – ${list.length} Energie-Entitäten (Wh/kWh/MWh oder device_class energy) gefunden`);
+  } catch (err) {
+    console.error(`[startup] HA-API NICHT erreichbar: ${err && err.message ? err.message : err}`);
+  }
+}
 
 async function safePoll() {
   try {
@@ -24,6 +37,7 @@ function main() {
 
   const intervalMs = pollIntervalMinutes() * 60000;
   console.log(`[poll] Intervall: ${pollIntervalMinutes()} min`);
+  haSelfCheck();
   safePoll();
   setInterval(safePoll, intervalMs);
 

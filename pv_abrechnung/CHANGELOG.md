@@ -2,6 +2,14 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.5 – 2026-07-24
+
+### Diagnose
+- **HA-API-Selbsttest beim Start:** Das Add-on prüft direkt beim Start die Verbindung zur
+  Home-Assistant-API und schreibt das Ergebnis ins Protokoll (Token vorhanden? Wie viele
+  Energie-Entitäten gefunden? bzw. der konkrete Fehler). Damit ist die Ursache eines leeren
+  Entitäten-Menüs sofort im „Protokoll"-Tab sichtbar.
+
 ## 0.1.4 – 2026-07-24
 
 ### Behoben
