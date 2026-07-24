@@ -148,21 +148,39 @@ async function pollOnce(config, opts = {}) {
     snap[vkey] = ventry;
   }
 
-  // Optionaler Akku-Ladestand (%) – informativ für Status/Bericht.
-  if (config.batterySensor) {
-    try {
-      const st = await getState(config.batterySensor);
-      const v = Number(String(st.state).replace(',', '.'));
-      snap._battery = {
-        value: Number.isFinite(v) ? v : null,
-        unit: (st.attributes && st.attributes.unit_of_measurement) || '%',
-        name: (st.attributes && st.attributes.friendly_name) || config.batterySensor,
-        ts: now,
-      };
-    } catch {
-      /* transient -> letzten Wert behalten */
+  // Optionale Akku-Ladestände (%) – informativ nur für den Status (Fehlalarm-Erkennung),
+  // nicht im Bericht. Mehrere Akkus möglich; Einzel-Sensor aus Alt-Config wird migriert.
+  const batteries = config.batteries && config.batteries.length
+    ? config.batteries
+    : config.batterySensor
+      ? [{ id: 'bat_legacy', name: 'Akku', entityId: config.batterySensor }]
+      : [];
+  if (batteries.length) {
+    const arr = [];
+    for (const b of batteries) {
+      if (!b.entityId) continue;
+      try {
+        const st = await getState(b.entityId);
+        const v = Number(String(st.state).replace(',', '.'));
+        arr.push({
+          id: b.id,
+          entityId: b.entityId,
+          name: b.name || (st.attributes && st.attributes.friendly_name) || b.entityId,
+          value: Number.isFinite(v) ? v : null,
+          unit: (st.attributes && st.attributes.unit_of_measurement) || '%',
+          ts: now,
+        });
+      } catch {
+        // transient -> letzten bekannten Wert behalten
+        const prev = (snap._batteries || []).find((x) => x.entityId === b.entityId);
+        if (prev) arr.push({ ...prev, name: b.name || prev.name });
+      }
     }
+    snap._batteries = arr;
+  } else {
+    delete snap._batteries;
   }
+  delete snap._battery; // altes Einzel-Feld wird nicht mehr gepflegt
 
   saveSnapshots(snap);
   return { at: now, meters: results, alerts };

@@ -1,6 +1,7 @@
 'use strict';
 
 const nodemailer = require('nodemailer');
+const { ANOMALY_TEXT } = require('../report/report');
 
 function makeTransport(smtp) {
   if (!smtp || !smtp.host) throw new Error('SMTP nicht konfiguriert (host fehlt)');
@@ -78,6 +79,46 @@ function alertContent(alert) {
   };
 }
 
+// Dokumentations-Mail nach dem Absenden eines Incident-Reports: hält fest, WER (HA-Account) WANN
+// die Auffälligkeiten abgesendet hat, samt Bewertung (kritisch/unkritisch, Text, Prüfer).
+async function sendIncidentReport(config, { anomalies, sentBy, sentAt }) {
+  const smtp = config.smtp || {};
+  const recipients = ((config.alertRecipients && config.alertRecipients.length ? config.alertRecipients : config.recipients) || []).filter(Boolean);
+  if (!recipients.length) throw new Error('Keine (Alarm-)Empfänger konfiguriert');
+  const when = new Date(sentAt).toLocaleString('de-DE');
+  const anlage = config.anlagenName ? ' – ' + config.anlagenName : '';
+  const critical = (anomalies || []).filter((a) => a.review && a.review.classification === 'kritisch').length;
+  const rows = (anomalies || [])
+    .map((a) => {
+      const r = a.review;
+      const cls = r
+        ? r.classification === 'kritisch'
+          ? '<b style="color:#b91c1c">kritisch</b>'
+          : '<span style="color:#166534">unkritisch</span>'
+        : '<span style="color:#b45309">nicht bewertet</span>';
+      const by = r ? `<div style="color:#777;font-size:11px">bewertet von ${esc(r.reviewedByName)} am ${new Date(r.reviewedAt).toLocaleString('de-DE')}</div>` : '';
+      const note = r && r.note ? `<div style="color:#555;font-size:12px">${esc(r.note)}</div>` : '';
+      return `<tr>
+        <td style="padding:4px 8px;vertical-align:top">${new Date(a.at).toLocaleString('de-DE')}</td>
+        <td style="padding:4px 8px;vertical-align:top">${esc(a.name || a.entityId)}</td>
+        <td style="padding:4px 8px;vertical-align:top">${esc(ANOMALY_TEXT[a.type] || a.type)}</td>
+        <td style="padding:4px 8px;vertical-align:top">${cls}${by}${note}</td>
+      </tr>`;
+    })
+    .join('');
+  const html = `<div style="font-family:system-ui,Arial,sans-serif;color:#222;max-width:820px">
+    <h2>Incident-Report – Dokumentation der Auffälligkeiten${esc(anlage)}</h2>
+    <p>Abgesendet von <b>${esc(sentBy)}</b> am ${when}. ${(anomalies || []).length} Auffälligkeiten, davon <b style="color:#b91c1c">${critical} kritisch</b>.</p>
+    <table style="border-collapse:collapse;width:100%;font-size:13px">
+      <thead><tr style="background:#f3f4f6;text-align:left"><th style="padding:4px 8px">Zeit</th><th style="padding:4px 8px">Zähler</th><th style="padding:4px 8px">Auffälligkeit</th><th style="padding:4px 8px">Bewertung</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="4" style="padding:8px;color:#888">Keine Auffälligkeiten protokolliert.</td></tr>'}</tbody>
+    </table></div>`;
+  const subject = `PV-Abrechnung${anlage} – Incident-Report (${(anomalies || []).length} Auffälligkeiten, ${critical} kritisch)`;
+  const tx = makeTransport(smtp);
+  const info = await tx.sendMail({ from: smtp.from || smtp.user, to: recipients.join(', '), subject, html });
+  return { messageId: info.messageId, accepted: info.accepted };
+}
+
 async function sendAlert(config, alert) {
   const smtp = config.smtp || {};
   const recipients = ((config.alertRecipients && config.alertRecipients.length ? config.alertRecipients : config.recipients) || []).filter(Boolean);
@@ -88,4 +129,4 @@ async function sendAlert(config, alert) {
   return { messageId: info.messageId, accepted: info.accepted };
 }
 
-module.exports = { sendReport, sendAlert, verify, makeTransport };
+module.exports = { sendReport, sendAlert, sendIncidentReport, verify, makeTransport };

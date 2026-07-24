@@ -10,9 +10,18 @@ const { backfillVirtual, earliestCommonDate } = require('../virtual/virtual');
 const { runReport, runPoll } = require('../engine');
 const ledger = require('../billing/ledger');
 const { getSeries } = require('../stats/stats');
-const { verify } = require('../mail/mailer');
+const { verify, sendIncidentReport } = require('../mail/mailer');
+const reviews = require('../review/reviews');
 const { readJson } = require('../store/store');
 const { dayPeriod, previousMonth, previousYear, previousDay, monthPeriod, yearPeriod } = require('../billing/periods');
+
+// Angemeldeter Home-Assistant-Nutzer aus den Ingress-Headern (vom Supervisor gesetzt).
+function haUser(req) {
+  return {
+    id: req.get('X-Remote-User-Id') || null,
+    name: req.get('X-Remote-User-Display-Name') || req.get('X-Remote-User-Name') || null,
+  };
+}
 
 function resolvePeriod(body = {}) {
   const now = new Date();
@@ -82,7 +91,36 @@ function createServer() {
         recentAnomalies: (e.anomalies || []).filter((a) => (a.at || 0) >= hour).slice(-5),
       };
     });
-    res.json({ at: now, meters, battery: snap._battery || null, reports: readJson('reports.json', []).slice(-20).reverse() });
+    const batteries = snap._batteries || (snap._battery ? [snap._battery] : []);
+    res.json({ at: now, meters, batteries, reports: readJson('reports.json', []).slice(-20).reverse() });
+  });
+
+  // Daten-Auffälligkeiten (Incident-Review): auflisten, bewerten, Incident-Report absenden.
+  app.get('/api/anomalies', (req, res) => res.json({ anomalies: reviews.listAnomalies(), protocol: reviews.loadProtocol().slice(-20).reverse() }));
+
+  app.post('/api/anomalies/review', (req, res) => {
+    const { id, note, classification } = req.body || {};
+    if (!id) return res.status(400).json({ error: 'id fehlt' });
+    const user = haUser(req);
+    const review = reviews.setReview(id, { note, classification, user });
+    res.json({ ok: true, id, review });
+  });
+
+  app.post('/api/incident-report/send', async (req, res) => {
+    try {
+      const config = loadConfig();
+      const user = haUser(req);
+      const sentBy = user.name || user.id || 'Unbekannt';
+      const anomalies = reviews.listAnomalies();
+      const sentAt = Date.now();
+      const mail = await sendIncidentReport(config, { anomalies, sentBy, sentAt });
+      const critical = anomalies.filter((a) => a.review && a.review.classification === 'kritisch').length;
+      const recips = (config.alertRecipients && config.alertRecipients.length ? config.alertRecipients : config.recipients) || [];
+      reviews.logIncidentReport({ at: sentAt, by: sentBy, byId: user.id || null, count: anomalies.length, critical, recipients: recips });
+      res.json({ ok: true, mail, count: anomalies.length, critical, by: sentBy });
+    } catch (err) {
+      res.status(500).json({ error: String(err.message || err) });
+    }
   });
 
   app.post('/api/poll', async (req, res) => {

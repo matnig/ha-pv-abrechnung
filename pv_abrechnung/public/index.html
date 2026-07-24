@@ -53,8 +53,6 @@
       <div><label>Betreiber (Name/Anschrift)</label><textarea id="betreiber" rows="3" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:14px;font-family:inherit" placeholder="Anlagenbetreiber…"></textarea></div>
       <div><label>Kunde (Name/Anschrift)</label><textarea id="kunde" rows="3" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:14px;font-family:inherit" placeholder="Kunde/Mieter…"></textarea></div>
     </div>
-    <label style="margin-top:8px">Akku-Ladestand-Sensor (optional)</label><input id="batterySensor" placeholder="z.B. sensor.batterie_soc" />
-    <div class="hint">Entity-ID eines Akku-Ladestand-Sensors (%). Wird im Status und Bericht angezeigt und <b>hilft, Fehlalarme zu erkennen</b>: Ist der Akku voll/aktiv, sind flache Zähler (kein Netzbezug/keine Einspeisung) normal – kein echter Ausfall.</div>
   </div>
 
   <div class="card">
@@ -83,6 +81,15 @@
         <li><b>PV-Erzeugung</b>: von der Anlage produzierte kWh. Nur zur <i>Information</i>, kein Geldbetrag.</li>
         <li><b>Lieferung an Kunde</b>: nur für virtuelle Zähler (z.B. Erzeugung − Einspeisung). Wird als <i>Kosten</i> berechnet.</li>
       </ul>
+    </div>
+
+    <h2 style="margin-top:20px">Akkus (optional)</h2>
+    <p class="mini">Akku-Ladestand-Sensoren (%). Werden im <b>Dashboard</b> live angezeigt und <b>helfen, Fehlalarme zu erkennen</b>: Ist ein Akku voll/aktiv, sind flache Zähler (kein Netzbezug/keine Einspeisung) normal – kein echter Ausfall. Im Bericht erscheint nur der Hinweis, dass die Akkus überwacht werden (kein Live-Wert). Mehrere möglich.</p>
+    <div id="batteries"></div>
+    <div class="row" style="margin-top:10px">
+      <div><label>Akku-Entität</label><select id="bEntity"></select></div>
+      <div><label>Name</label><input id="bName" placeholder="z.B. Hausspeicher" /></div>
+      <div style="max-width:120px"><button onclick="addBattery()">+ Hinzufügen</button></div>
     </div>
   </div>
 
@@ -207,6 +214,17 @@
     <h2>⚠ Offene Störungen / Zählertausch</h2>
     <p class="mini">Ein Zählerabfall wird untersucht. War es ein <b>Zählertausch</b>, hier bestätigen – der (virtuelle) Zähler läuft dann nahtlos weiter. Sonst liegt ein technischer Fehler vor.</p>
     <div id="incidents"></div>
+  </div>
+
+  <div class="card">
+    <h2>Daten-Auffälligkeiten kontrollieren</h2>
+    <p class="mini">Jede erkannte Auffälligkeit (Abfall, Sensor-Ausfall, Zählertausch, stillstehender Wert …) kann hier mit einem
+      <b>Text</b> versehen und als <b>kritisch</b> oder <b>unkritisch</b> eingestuft werden. Festgehalten wird, welcher
+      Home-Assistant-Account die Bewertung wann vorgenommen hat. Die Bewertungen erscheinen im <b>Monatsprotokoll</b>.
+      „Incident-Report absenden" verschickt eine Dokumentations-Mail (wer/wann/Bewertungen).</p>
+    <div id="anomalies" class="mini">–</div>
+    <div style="margin-top:12px"><button onclick="sendIncidentReport()">📧 Incident-Report absenden</button></div>
+    <div id="incidentProtocol" class="mini" style="margin-top:12px"></div>
   </div>
 
   <div class="card">

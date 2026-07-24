@@ -27,7 +27,8 @@ async function loadEntities() {
     const opts = entities.map((e) => `<option value="${esc(e.entityId)}">${esc(e.name)} (${esc(e.state)} ${esc(e.unit)})</option>`).join('');
     $('mEntity').innerHTML = opts;
     $('vCompEntity').innerHTML = opts;
-    if (config) { renderVMeters(); renderDraftComponents(); } // Namen jetzt auflösbar
+    if ($('bEntity')) $('bEntity').innerHTML = opts;
+    if (config) { renderVMeters(); renderDraftComponents(); renderBatteries(); } // Namen jetzt auflösbar
   } catch (e) {
     flash('Entitäten laden fehlgeschlagen: ' + e.message, false);
   }
@@ -57,6 +58,31 @@ function addMeter() {
 function delMeter(i) {
   config.meters.splice(i, 1);
   renderMeters();
+}
+
+// ---- Akkus (nur Status/Fehlalarm-Erkennung, nicht im Bericht als Wert) ----
+function renderBatteries() {
+  const el = $('batteries');
+  if (!el) return;
+  const list = config.batteries || [];
+  el.innerHTML = list.length
+    ? `<table><thead><tr><th>Name</th><th>Entität</th><th></th></tr></thead><tbody>${list
+        .map((b, i) => `<tr><td>${esc(b.name || '')}</td><td class="tag">${esc(b.entityId)}</td><td><button class="danger" onclick="delBattery(${i})">×</button></td></tr>`)
+        .join('')}</tbody></table>`
+    : '<p class="mini">Noch keine Akkus.</p>';
+}
+function addBattery() {
+  const entityId = $('bEntity').value;
+  if (!entityId) return flash('Keine Akku-Entität gewählt', false);
+  const ent = entities.find((e) => e.entityId === entityId);
+  config.batteries = config.batteries || [];
+  config.batteries.push({ id: 'bat' + Date.now(), name: $('bName').value || (ent ? ent.name : entityId), entityId });
+  $('bName').value = '';
+  renderBatteries();
+}
+function delBattery(i) {
+  config.batteries.splice(i, 1);
+  renderBatteries();
 }
 
 // ---- Virtuelle Zähler ----
@@ -181,7 +207,6 @@ function fillForm() {
   $('anlagenName').value = config.anlagenName || '';
   $('betreiber').value = config.betreiber || '';
   $('kunde').value = config.kunde || '';
-  $('batterySensor').value = config.batterySensor || '';
   $('sDaily').value = String(!!s.daily); $('sMonthly').value = String(!!s.monthly);
   $('sYearly').value = String(!!s.yearly); $('sHour').value = s.hour;
   $('smtpHost').value = sm.host; $('smtpPort').value = sm.port; $('smtpSecure').value = String(!!sm.secure);
@@ -190,6 +215,7 @@ function fillForm() {
   renderMeters();
   renderVMeters();
   renderDraftComponents();
+  renderBatteries();
 }
 
 function collectForm() {
@@ -207,7 +233,6 @@ function collectForm() {
   config.anlagenName = $('anlagenName').value;
   config.betreiber = $('betreiber').value;
   config.kunde = $('kunde').value;
-  config.batterySensor = $('batterySensor').value;
   config.schedule = {
     daily: $('sDaily').value === 'true', monthly: $('sMonthly').value === 'true',
     yearly: $('sYearly').value === 'true', hour: +$('sHour').value,
@@ -334,6 +359,7 @@ async function pollNow() {
     flash(`Gelesen: ${r.meters.length} Zähler.` + (r.alerts?.length ? ` ${r.alerts.length} Alarm-Mail(s).` : ''));
     loadStatus();
     loadIncidents();
+    loadAnomalies();
   } catch (e) {
     flash('Lesen fehlgeschlagen: ' + e.message, false);
   }
@@ -356,6 +382,79 @@ async function loadIncidents() {
         .join('')}</tbody></table>`;
   } catch (e) {
     /* still */
+  }
+}
+
+// ---- Daten-Auffälligkeiten kontrollieren ----
+const ANOMALY_LABEL = {
+  meter_swap: 'Zählertausch (manuell bestätigt)', technical_fault: 'STÖRUNG: Abfall >2h ohne Erholung',
+  investigating: 'möglicher Zählerfehler (untersucht)', offline: 'Sensor ausgefallen (untersucht)',
+  offline_fault: 'STÖRUNG: Sensor >2h offline', reset: 'Zähler-Reset (fortgeführt)',
+  stale: 'Wert stand still', unavailable: 'Sensor nicht verfügbar', spike: 'unrealistischer Sprung',
+  jitter: 'kleiner Rückwärts-Sprung', transient: 'kurzzeitige Störung (Wert kam zurück)', error: 'Lesefehler',
+};
+
+async function loadAnomalies() {
+  try {
+    const d = await api('api/anomalies');
+    const list = d.anomalies || [];
+    $('anomalies').innerHTML = list.length
+      ? list
+          .map((a) => {
+            const r = a.review;
+            const badge = r
+              ? r.classification === 'kritisch'
+                ? '<span style="color:#b91c1c;font-weight:600">● kritisch</span>'
+                : '<span style="color:#166534;font-weight:600">● unkritisch</span>'
+              : '<span style="color:#b45309">● nicht bewertet</span>';
+            const meta = r ? `<div class="tag">bewertet von ${esc(r.reviewedByName)} am ${new Date(r.reviewedAt).toLocaleString('de-DE')}</div>` : '';
+            return `<div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px">
+              <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                <div><b>${esc(a.name || a.entityId)}</b> – ${esc(ANOMALY_LABEL[a.type] || a.type)}
+                  <span class="tag">${new Date(a.at).toLocaleString('de-DE')}</span></div>
+                <div>${badge}</div>
+              </div>
+              ${meta}
+              <div class="row" style="margin-top:6px">
+                <div style="flex:2"><input id="note_${a.id}" placeholder="Bewertungstext…" value="${esc(r ? r.note : '')}" /></div>
+                <div style="max-width:150px"><button class="sec" onclick="reviewAnomaly('${encodeURIComponent(a.id)}','unkritisch')">unkritisch</button></div>
+                <div style="max-width:150px"><button class="danger" onclick="reviewAnomaly('${encodeURIComponent(a.id)}','kritisch')">kritisch</button></div>
+              </div></div>`;
+          })
+          .join('')
+      : '<p style="color:#16a34a">✓ Keine Auffälligkeiten protokolliert.</p>';
+
+    const proto = d.protocol || [];
+    $('incidentProtocol').innerHTML = proto.length
+      ? '<b>Abgesendete Incident-Reports:</b><ul>' + proto
+          .map((p) => `<li>${new Date(p.at).toLocaleString('de-DE')} – von ${esc(p.by)}: ${p.count} Auffälligkeiten (${p.critical} kritisch)</li>`)
+          .join('') + '</ul>'
+      : '';
+  } catch (e) {
+    $('anomalies').textContent = 'Auffälligkeiten nicht ladbar: ' + e.message;
+  }
+}
+
+async function reviewAnomaly(encId, classification) {
+  const id = decodeURIComponent(encId);
+  const note = ($('note_' + id) || {}).value || '';
+  try {
+    await api('api/anomalies/review', { method: 'POST', body: JSON.stringify({ id, note, classification }) });
+    flash(`Als „${classification}" bewertet.`);
+    loadAnomalies();
+  } catch (e) {
+    flash('Bewertung fehlgeschlagen: ' + e.message, false);
+  }
+}
+
+async function sendIncidentReport() {
+  if (!confirm('Incident-Report jetzt absenden? Es wird eine Dokumentations-Mail mit allen Auffälligkeiten und Bewertungen verschickt.')) return;
+  try {
+    const r = await api('api/incident-report/send', { method: 'POST', body: JSON.stringify({}) });
+    flash(`Incident-Report versendet: ${r.count} Auffälligkeiten (${r.critical} kritisch), abgesendet von ${r.by}.`);
+    loadAnomalies();
+  } catch (e) {
+    flash('Incident-Report fehlgeschlagen: ' + e.message, false);
   }
 }
 
@@ -440,8 +539,10 @@ async function loadStatus() {
     const reports = s.reports
       .map((r) => `<li>${new Date(r.at).toLocaleString('de-DE')} – ${esc(r.periodType)} ${esc(r.periodLabel)}: ${r.total} € ${r.sent ? '✉️' : ''} ${r.error ? '⚠ ' + esc(r.error) : ''}</li>`)
       .join('');
-    const bat = s.battery && s.battery.value != null
-      ? `<div style="margin:8px 0;font-size:14px">🔋 Akku-Ladestand: <b>${s.battery.value}${esc(s.battery.unit || '%')}</b> <span class="tag">(${agoText(s.battery.ts, s.at)})</span></div>`
+    const bat = (s.batteries || []).length
+      ? '<div style="margin:8px 0;font-size:14px">🔋 ' + s.batteries
+          .map((b) => `${esc(b.name || b.entityId)}: <b>${b.value != null ? b.value + esc(b.unit || '%') : '–'}</b> <span class="tag">(${agoText(b.ts, s.at)})</span>`)
+          .join(' · ') + '</div>'
       : '';
     $('status').innerHTML =
       bat +
@@ -488,6 +589,7 @@ async function init() {
     await loadEntities();
     await loadStatus();
     await loadIncidents();
+    await loadAnomalies();
     await loadLedger();
   } catch (e) {
     flash('Initialisierung fehlgeschlagen: ' + e.message, false);

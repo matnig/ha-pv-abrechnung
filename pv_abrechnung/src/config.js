@@ -26,7 +26,8 @@ const DEFAULT_CONFIG = {
     netzpreis: 0, // €/kWh Netzbetreiber-Strompreis (Vergleich für Ersparnis; 0 = keine Ersparnis-Anzeige)
   },
   showInfoStats: true, // informative Statistik (Autarkiegrad, Ersparnis) im Bericht anzeigen
-  batterySensor: '', // optional: entity_id eines Akku-Ladestand-Sensors (%) für Status + Bericht
+  batteries: [], // optionale Akku-Ladestand-Sensoren (%) für den Status: [{ id, name, entityId }]
+  batterySensor: '', // DEPRECATED (Einzel-Sensor) – wird beim Laden nach batteries migriert
   anlagenName: '', // Name der PV-Anlage (im Betreff + Bericht + CSV)
   betreiber: '', // Anlagenbetreiber (Name/Anschrift, mehrzeilig möglich)
   kunde: '', // Kunde/Mieter (Name/Anschrift, mehrzeilig möglich)
@@ -54,10 +55,16 @@ function loadConfig() {
     writeJson('config.json', DEFAULT_CONFIG);
     return { ...DEFAULT_CONFIG };
   }
+  // Alt-Config: Einzel-Akku-Sensor -> Akku-Liste migrieren.
+  let batteries = Array.isArray(cfg.batteries) ? cfg.batteries : [];
+  if (!batteries.length && cfg.batterySensor) {
+    batteries = [{ id: 'bat_legacy', name: 'Akku', entityId: cfg.batterySensor }];
+  }
   // fehlende Felder mit Defaults auffüllen (Vorwärtskompatibilität)
   return {
     ...DEFAULT_CONFIG,
     ...cfg,
+    batteries,
     virtualMeters: cfg.virtualMeters || [],
     alertRecipients: cfg.alertRecipients || [],
     reportFooter: cfg.reportFooter || '',

@@ -104,9 +104,12 @@ function buildInfoStats(billing) {
     parts.push(`<div style="margin-top:10px;font-size:14px;color:#166534">💡 Ersparnis für den Kunden: <b>${eur(t.ersparnis)}</b> gegenüber Netzstrom
       (PV ${priceStr(t.lieferpreis)} statt Netz ${priceStr(t.netzpreis)} · ${kwh(t.pvKwh)}).</div>`);
   }
-  if (billing.battery && billing.battery.value != null) {
-    parts.push(`<div style="margin-top:10px;font-size:14px">🔋 Akku-Ladestand: <b>${billing.battery.value}${esc(billing.battery.unit || '%')}</b>
-      <span style="color:#888;font-size:12px">– hilft, ruhige Zeiträume (Akku deckt die Last) von echten Zähler-Ausfällen zu unterscheiden.</span></div>`);
+  if (billing.batteries && billing.batteries.length) {
+    const names = billing.batteries.map((b) => esc(b.name || b.entityId)).join(', ');
+    parts.push(`<div style="margin-top:10px;font-size:14px">🔋 Akku-Überwachung aktiv (${names}).
+      <span style="color:#888;font-size:12px">Die Ladezustände werden laufend überwacht – das hilft, ruhige Zeiträume
+      (Akku deckt die Last) von echten Zähler-Ausfällen zu unterscheiden. Auffälligkeiten sind unten protokolliert
+      und im Dashboard kontrollierbar.</span></div>`);
   }
   return parts.length ? `<h3 style="margin-top:24px">Auswertung (informativ)</h3>${parts.join('')}` : '';
 }
@@ -164,16 +167,22 @@ function buildHtml(billing) {
     .join('');
 
   const anomalyRows = billing.anomalies.length
-    ? `<h3 style="margin-top:24px">Daten-Auffälligkeiten (${billing.anomalies.length})</h3>
+    ? `<h3 style="margin-top:24px">Daten-Auffälligkeiten – Protokoll (${billing.anomalies.length})</h3>
        <ul style="color:#555;font-size:13px">
        ${billing.anomalies
          .slice(-30)
-         .map(
-           (a) =>
-             `<li>${new Date(a.at).toLocaleString('de-DE')} – ${esc(a.name || a.entityId || '')}: ${esc(
-               ANOMALY_TEXT[a.type] || a.type
-             )}</li>`
-         )
+         .map((a) => {
+           const r = a.review;
+           const cls = r
+             ? r.classification === 'kritisch'
+               ? ' <b style="color:#b91c1c">[kritisch]</b>'
+               : ' <span style="color:#166534">[unkritisch]</span>'
+             : ' <span style="color:#b45309">[nicht bewertet]</span>';
+           const by = r
+             ? `<div style="color:#777;font-size:11px">bewertet von ${esc(r.reviewedByName)} am ${new Date(r.reviewedAt).toLocaleString('de-DE')}${r.note ? ' · ' + esc(r.note) : ''}</div>`
+             : '';
+           return `<li>${new Date(a.at).toLocaleString('de-DE')} – ${esc(a.name || a.entityId || '')}: ${esc(ANOMALY_TEXT[a.type] || a.type)}${cls}${by}</li>`;
+         })
          .join('')}
        </ul>`
     : '<p style="color:#16a34a;font-size:13px">✓ Keine Daten-Auffälligkeiten im Zeitraum.</p>';
@@ -300,4 +309,4 @@ function buildCsv(billing) {
   return out.join('\r\n');
 }
 
-module.exports = { buildHtml, buildCsv, subject };
+module.exports = { buildHtml, buildCsv, subject, ANOMALY_TEXT };

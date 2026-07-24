@@ -6,6 +6,7 @@ const { sendAlert } = require('./mail/mailer');
 const { computeBilling } = require('./billing/billing');
 const { resolvePeriodReadings } = require('./billing/resolver');
 const ledger = require('./billing/ledger');
+const { attachReviews } = require('./review/reviews');
 const { monthPeriod } = require('./billing/periods');
 const { buildHtml, buildCsv, subject } = require('./report/report');
 const { sendReport } = require('./mail/mailer');
@@ -29,7 +30,7 @@ function ledgerToBilling(e) {
     generatedAt: e.at,
     lines: (e.lines || []).map((l) => ({ ...l, source: 'beleg', warnings: [] })),
     totals: e.totals,
-    anomalies: [],
+    anomalies: e.anomalies || [], // im Beleg eingefrorene Auffälligkeiten inkl. Bewertung
     monthly: e.monthly || undefined,
   };
 }
@@ -71,7 +72,13 @@ async function runReport(period, opts = {}) {
   billing.stammdaten = finalized
     ? finalized.stammdaten || { anlagenName: '', betreiber: '', kunde: '' }
     : { anlagenName: config.anlagenName || '', betreiber: config.betreiber || '', kunde: config.kunde || '' };
-  billing.battery = finalized ? finalized.battery || null : loadSnapshots()._battery || null;
+  // Akkus: im Bericht nur die Info „wird überwacht" (Namen), kein Live-Ladestand.
+  billing.batteries = finalized
+    ? finalized.batteries || []
+    : (config.batteries || []).map((b) => ({ name: b.name, entityId: b.entityId }));
+  // Bewertungen (kritisch/unkritisch, Text, Prüfer) an die Auffälligkeiten anheften – fürs
+  // Monatsprotokoll im Bericht. Bei abgeschlossenem Beleg sind sie bereits eingefroren.
+  if (!finalized) billing.anomalies = attachReviews(billing.anomalies);
 
   // Beim Versand einer noch nicht abgeschlossenen Periode: Beleg vorbereiten (Prüfsumme steht dann
   // schon in der Mail); nach erfolgreichem Versand wird er ins Journal geschrieben.
