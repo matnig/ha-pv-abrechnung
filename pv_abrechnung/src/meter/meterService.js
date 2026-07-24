@@ -92,7 +92,6 @@ async function pollOnce(config, opts = {}) {
   for (const vm of config.virtualMeters || []) {
     const vkey = 'virtual:' + vm.id;
     const ventry = snap[vkey] || { daily: {}, anomalies: [], isVirtual: true };
-    let eff = 0;
     let ok = true;
     for (const comp of vm.components || []) {
       const ce = snap[comp.entityId];
@@ -100,9 +99,20 @@ async function pollOnce(config, opts = {}) {
         ok = false;
         break;
       }
-      eff += Number(comp.factor || 0) * ce.lastEffective;
     }
     if (ok) {
+      // Basislinie verhindert negative Absolutwerte (Zähler mit versch. Nullpunkten).
+      // Ohne Backfill: aktuelle Stände als Basislinie -> virtueller Zähler startet bei 0.
+      if (!ventry.baselinePoll) {
+        ventry.baselinePoll = {};
+        for (const comp of vm.components) ventry.baselinePoll[comp.entityId] = snap[comp.entityId].lastEffective;
+      }
+      let eff = 0;
+      for (const comp of vm.components) {
+        const base = ventry.baselinePoll[comp.entityId] != null ? ventry.baselinePoll[comp.entityId] : snap[comp.entityId].lastEffective;
+        eff += Number(comp.factor || 0) * (snap[comp.entityId].lastEffective - base);
+      }
+      eff = Math.max(0, Math.round((eff + Number.EPSILON) * 1000) / 1000);
       ventry.lastEffective = eff;
       ventry.lastTs = now;
       ventry.daily[dayKey] = eff;

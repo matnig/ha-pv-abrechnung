@@ -2,6 +2,18 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.9 – 2026-07-24
+
+### Virtuelle Zähler: nie negativ + rückwirkende Berechnung
+- **Virtueller Zählerstand kann nicht mehr negativ werden.** Ursache war, dass echte Zähler
+  unterschiedliche Nullpunkte haben (z.B. Einspeisezähler zählt länger als der PV-Zähler); die
+  absolute Differenz war dadurch negativ. Jetzt zählt der virtuelle Zähler ab einem **Startdatum**
+  als Summe der faktorisierten Zuwächse (bei 0 gedeckelt).
+- **Startdatum je virtuellem Zähler einstellbar**, inkl. „frühestes Datum ermitteln" (frühestes
+  Datum, ab dem beide Zähler Statistikdaten haben).
+- **Rückwirkende Berechnung** aus der HA-Langzeitstatistik: „berechnen" holt die Werte beider
+  Zähler ab dem Startdatum und rechnet den virtuellen Verlauf nach.
+
 ## 0.1.8 – 2026-07-24
 
 ### Behoben (die eigentliche Ursache des 401)

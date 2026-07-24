@@ -65,11 +65,50 @@ const formulaText = (comps) =>
 function renderVMeters() {
   config.virtualMeters = config.virtualMeters || [];
   $('vmeters').innerHTML = config.virtualMeters.length
-    ? `<table><thead><tr><th>Name</th><th>Formel</th><th>Rolle</th><th></th></tr></thead><tbody>${config.virtualMeters
-        .map((v, i) => `<tr><td>${v.name}</td><td class="tag">${formulaText(v.components)}</td><td>${v.role}</td>
-          <td><button class="danger" onclick="delVMeter(${i})">×</button></td></tr>`)
-        .join('')}</tbody></table>`
+    ? `<table><thead><tr><th>Name</th><th>Formel</th><th>Startdatum</th><th>Rückwirkend</th><th></th></tr></thead><tbody>${config.virtualMeters
+        .map(
+          (v, i) => `<tr>
+            <td>${v.name}<div class="tag">${v.role}</div></td>
+            <td class="tag">${formulaText(v.components)}</td>
+            <td><input type="date" value="${v.startDate || ''}" onchange="setVmStart(${i}, this.value)" style="max-width:150px" />
+                <div class="mini"><a href="#" onclick="vmRange(${i});return false">frühestes Datum ermitteln</a></div></td>
+            <td><button class="sec" onclick="vmBackfill(${i})">berechnen</button></td>
+            <td><button class="danger" onclick="delVMeter(${i})">×</button></td>
+          </tr>`
+        )
+        .join('')}</tbody></table>
+      <p class="mini">Rückwirkend berechnen holt die Werte beider Zähler aus der HA-Statistik ab dem Startdatum und rechnet den virtuellen Zähler nach (nie negativ).</p>`
     : '<p class="mini">Noch keine virtuellen Zähler.</p>';
+}
+
+function setVmStart(i, val) {
+  config.virtualMeters[i].startDate = val || undefined;
+}
+
+async function vmRange(i) {
+  const vm = config.virtualMeters[i];
+  await saveConfig();
+  try {
+    const r = await api('api/virtual/' + encodeURIComponent(vm.id) + '/range');
+    if (!r.earliest) return flash('Keine Statistik für die Komponenten gefunden.', false);
+    vm.startDate = r.earliest;
+    renderVMeters();
+    flash('Frühestes gemeinsames Datum: ' + r.earliest + ' – als Startdatum gesetzt.');
+  } catch (e) {
+    flash('Zeitraum ermitteln fehlgeschlagen: ' + e.message, false);
+  }
+}
+
+async function vmBackfill(i) {
+  const vm = config.virtualMeters[i];
+  await saveConfig();
+  try {
+    const r = await api('api/virtual/' + encodeURIComponent(vm.id) + '/backfill', { method: 'POST', body: JSON.stringify({ startDate: vm.startDate }) });
+    flash(`Rückwirkend berechnet ab ${r.startDate}: ${r.days} Tage, aktueller Stand ${r.currentStand} kWh.`);
+    loadStatus();
+  } catch (e) {
+    flash('Rückwirkende Berechnung fehlgeschlagen: ' + e.message, false);
+  }
 }
 
 function renderDraftComponents() {

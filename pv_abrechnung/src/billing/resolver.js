@@ -173,8 +173,12 @@ async function resolvePeriodReadings(config, snapshots, period, opts = {}) {
     const a = valueAtOrBefore(daily, anfangTarget);
     const e = valueAtOrBefore(daily, endeTarget);
     let kwh = null;
-    if (a.value == null || e.value == null) warnings.push('virtueller Zähler ohne Verlauf im Zeitraum');
-    else kwh = round2(e.value - a.value);
+    if (a.value == null || e.value == null) warnings.push('virtueller Zähler ohne Verlauf im Zeitraum – ggf. „Rückwirkend berechnen"');
+    else {
+      const diff = round2(e.value - a.value);
+      kwh = Math.max(0, diff); // nie negativ
+      if (diff < 0) warnings.push('negativer Rohwert auf 0 gedeckelt (Startdatum/Backfill prüfen)');
+    }
     out[vm.id] = {
       meterId: vm.id,
       name: vm.name,

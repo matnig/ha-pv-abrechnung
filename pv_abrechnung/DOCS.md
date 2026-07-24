@@ -38,6 +38,12 @@ Fortlaufende Rechen-Zähler aus echten Zählern. Beispiel **„an Kunde geliefer
 - Oder manuell: Name + Rolle wählen, Komponenten (echter Zähler × Faktor +1/−1) hinzufügen.
 - Virtuelle Zähler laufen über Störungen und Zählertausch hinweg **stetig** weiter, weil sie auf
   den bereinigten Ständen der echten Zähler aufbauen.
+- **Startdatum & rückwirkende Berechnung:** Weil echte Zähler unterschiedliche Nullpunkte haben
+  können (z.B. Einspeisezähler zählt länger als der PV-Zähler), zählt der virtuelle Zähler ab
+  einem **Startdatum** und ist **nie negativ**. In der Zeile des virtuellen Zählers:
+  „frühestes Datum ermitteln" (frühester Tag, ab dem beide Zähler Statistik haben) und
+  „berechnen" (holt die Historie beider Zähler aus der HA-Statistik und rechnet den virtuellen
+  Verlauf ab dem Startdatum nach).
 
 ## 3. Tarife
 

@@ -3,8 +3,9 @@
 const express = require('express');
 const path = require('path');
 const { loadConfig, saveConfig } = require('../config');
-const { listEnergyEntities } = require('../ha/haClient');
-const { loadSnapshots, openIncidents, applySwap } = require('../meter/meterService');
+const haClient = require('../ha/haClient');
+const { loadSnapshots, saveSnapshots, openIncidents, applySwap } = require('../meter/meterService');
+const { backfillVirtual, earliestCommonDate } = require('../virtual/virtual');
 const { runReport, runPoll } = require('../engine');
 const { getSeries } = require('../stats/stats');
 const { verify } = require('../mail/mailer');
@@ -43,7 +44,7 @@ function createServer() {
 
   app.get('/api/entities', async (req, res) => {
     try {
-      res.json(await listEnergyEntities());
+      res.json(await haClient.listEnergyEntities());
     } catch (err) {
       console.error('[api/entities]', err && err.message ? err.message : err);
       res.status(502).json({ error: 'Entitäten von HA konnten nicht geladen werden: ' + String(err.message || err) });
@@ -71,6 +72,33 @@ function createServer() {
   });
 
   app.get('/api/incidents', (req, res) => res.json(openIncidents()));
+
+  // Frühestes gemeinsames Statistik-Datum der Komponenten (für den Startdatum-Picker).
+  app.get('/api/virtual/:id/range', async (req, res) => {
+    try {
+      const vm = (loadConfig().virtualMeters || []).find((v) => v.id === req.params.id);
+      if (!vm) return res.status(404).json({ error: 'Virtueller Zähler nicht gefunden' });
+      const earliest = await earliestCommonDate(vm.components, haClient, loadSnapshots());
+      res.json({ earliest, latest: new Date().toISOString().slice(0, 10) });
+    } catch (err) {
+      res.status(502).json({ error: String(err.message || err) });
+    }
+  });
+
+  // Rückwirkende Berechnung des virtuellen Zählers aus der HA-Statistik.
+  app.post('/api/virtual/:id/backfill', async (req, res) => {
+    try {
+      const vm = (loadConfig().virtualMeters || []).find((v) => v.id === req.params.id);
+      if (!vm) return res.status(404).json({ error: 'Virtueller Zähler nicht gefunden' });
+      if (req.body && req.body.startDate) vm.startDate = req.body.startDate;
+      const snap = loadSnapshots();
+      const summary = await backfillVirtual(vm, haClient, snap);
+      saveSnapshots(snap);
+      res.json(summary);
+    } catch (err) {
+      res.status(502).json({ error: String(err.message || err) });
+    }
+  });
 
   app.post('/api/incidents/:entityId/swap', (req, res) => {
     const r = applySwap(req.params.entityId);
