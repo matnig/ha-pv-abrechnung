@@ -40,10 +40,26 @@ async function authedFetch(url, timeoutMs = 15000) {
   }
 }
 
-async function getState(entityId) {
-  const res = await authedFetch(`${httpBase()}/states/${encodeURIComponent(entityId)}`);
-  if (!res.ok) throw new Error(`HA getState(${entityId}) -> HTTP ${res.status}`);
-  return res.json();
+async function getState(entityId, retries = 2) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    if (attempt) await new Promise((r) => setTimeout(r, 1500));
+    let res;
+    try {
+      res = await authedFetch(`${httpBase()}/states/${encodeURIComponent(entityId)}`);
+    } catch (e) {
+      lastErr = e; // Netzwerk/Timeout -> erneut versuchen
+      continue;
+    }
+    if (res.ok) return res.json();
+    // 502/503/504 = HA/Proxy transient nicht bereit -> erneut versuchen; 401/404 sofort werfen.
+    if ([502, 503, 504].includes(res.status)) {
+      lastErr = new Error(`HA getState(${entityId}) -> HTTP ${res.status}`);
+      continue;
+    }
+    throw new Error(`HA getState(${entityId}) -> HTTP ${res.status}`);
+  }
+  throw lastErr;
 }
 
 // Energie-Einheit? Akzeptiert Wh, kWh und MWh (case-insensitiv, mit/ohne Leerzeichen).

@@ -40,22 +40,28 @@ async function pollOnce(config, opts = {}) {
     if (!meter.entityId) continue;
     const entry = snap[meter.entityId] || { state: null, daily: {}, anomalies: [], incident: null };
 
-    let reading;
+    let st;
     try {
-      const st = await getState(meter.entityId);
-      const unit = (st.attributes && st.attributes.unit_of_measurement) || '';
-      const factor = haClient.unitFactorToKwh(unit);
-      entry.unit = unit;
-      entry.unitFactor = factor;
-      const available = !UNAVAILABLE.has(st.state);
-      // Rohwert immer auf kWh normalisieren (Wh/MWh -> kWh), damit alle Berechnungen in kWh laufen.
-      const n = Number(String(st.state).replace(',', '.'));
-      const rawKwh = available && Number.isFinite(n) ? n * factor : st.state;
-      reading = { raw: rawKwh, available, now };
+      st = await getState(meter.entityId);
     } catch (err) {
-      reading = { raw: null, available: false, now };
-      entry.anomalies.push({ type: 'error', at: now, message: String(err.message || err) });
+      // HA nicht erreichbar (z.B. transienter 502 direkt nach Add-on-Neustart) -> KEINE
+      // "unavailable"-Markierung und NICHT in die Auffälligkeiten schreiben (transient/erwartet):
+      // letzten Stand behalten, Zähler überspringen, nur ins Log.
+      console.warn(`[poll] ${meter.entityId} übersprungen (HA nicht erreichbar): ${err.message || err}`);
+      snap[meter.entityId] = entry;
+      results.push({ entityId: meter.entityId, name: meter.name, effective: entry.lastEffective, updated: false, incident: !!entry.incident, anomalies: [] });
+      continue;
     }
+
+    const unit = (st.attributes && st.attributes.unit_of_measurement) || '';
+    const factor = haClient.unitFactorToKwh(unit);
+    entry.unit = unit;
+    entry.unitFactor = factor;
+    const available = !UNAVAILABLE.has(st.state);
+    // Rohwert immer auf kWh normalisieren (Wh/MWh -> kWh), damit alle Berechnungen in kWh laufen.
+    const n = Number(String(st.state).replace(',', '.'));
+    const rawKwh = available && Number.isFinite(n) ? n * factor : st.state;
+    const reading = { raw: rawKwh, available, now };
 
     const out = processReading(entry.state, reading, mc);
     entry.state = out.state;

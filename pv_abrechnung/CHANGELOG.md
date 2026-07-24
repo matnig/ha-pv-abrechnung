@@ -2,6 +2,15 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.16 – 2026-07-24
+
+### Behoben: Zähler fälschlich „unavailable"
+- Direkt nach einem Add-on-(Neu)Start ist die HA-API kurz mit **502** nicht erreichbar. Das wurde
+  fälschlich als „Zähler unavailable" gewertet. Jetzt gilt: **HA nicht erreichbar ≠ Sensor unavailable** –
+  der letzte Stand bleibt erhalten, der Zähler wird übersprungen (nur Log), keine Auffälligkeit.
+- `getState` **wiederholt** transiente Fehler (502/503/504/Netzwerk); 401/404 werfen sofort.
+- Erster Poll/Selbsttest nach Start **verzögert** (HA-Core braucht nach Neustart einen Moment).
+
 ## 0.1.15 – 2026-07-24
 
 ### Einspeisevergütung: zwei Fälle konfigurierbar
