@@ -2,6 +2,11 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.3 – 2026-07-24
+
+- Versions-Bump, damit Home Assistant das Update sicher anbietet. Inhaltlich identisch mit 0.1.2
+  (Wh/MWh-Unterstützung + kWh-Normalisierung, robustere Entitätenliste).
+
 ## 0.1.2 – 2026-07-24
 
 ### Geändert / Behoben
