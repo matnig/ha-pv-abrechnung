@@ -1,0 +1,20 @@
+{
+  "name": "ha-pv-abrechnung",
+  "version": "0.1.0",
+  "description": "Home-Assistant-Add-on: zählerbasierte PV-Abrechnung mit Report-Versand per Mail",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18.18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.14",
+    "ws": "^8.18.0"
+  },
+  "license": "MIT"
+}

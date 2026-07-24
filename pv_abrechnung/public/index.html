@@ -1,0 +1,195 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PV Abrechnung</title>
+<style>
+  :root { --bg:#f7f8fa; --card:#fff; --line:#e5e7eb; --accent:#2563eb; --text:#1f2937; --muted:#6b7280; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:system-ui,Arial,sans-serif; background:var(--bg); color:var(--text); }
+  header { background:var(--accent); color:#fff; padding:14px 20px; font-size:18px; font-weight:600; }
+  main { max-width:960px; margin:0 auto; padding:18px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  h2 { font-size:15px; margin:0 0 12px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:8px 0 3px; }
+  input, select { width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:6px; font-size:14px; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:6px; padding:8px 14px; font-size:14px; cursor:pointer; }
+  button.sec { background:#eef2ff; color:var(--accent); }
+  button.danger { background:#fee2e2; color:#b91c1c; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:6px; border-bottom:1px solid var(--line); }
+  .row { display:flex; gap:8px; align-items:end; flex-wrap:wrap; }
+  .row > div { flex:1; min-width:120px; }
+  .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .tag { font-size:11px; color:var(--muted); }
+  .msg { padding:8px 10px; border-radius:6px; font-size:13px; margin-top:10px; display:none; }
+  .msg.ok { background:#dcfce7; color:#166534; display:block; }
+  .msg.err { background:#fee2e2; color:#b91c1c; display:block; }
+  iframe { width:100%; height:520px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  .mini { font-size:12px; color:var(--muted); }
+  .hint { font-size:11px; color:var(--muted); margin-top:3px; line-height:1.35; }
+  .legend { background:#f8fafc; border:1px dashed var(--line); border-radius:8px; padding:10px 12px; margin-top:12px; font-size:12px; }
+  .legend ul { margin:6px 0 0; padding-left:18px; } .legend li { margin:2px 0; }
+  .bars { display:flex; align-items:flex-end; gap:4px; height:120px; margin:10px 0; }
+  .bars .bar { flex:1; background:var(--accent); border-radius:3px 3px 0 0; min-height:2px; position:relative; }
+  .bars .bar.neg { background:#ef4444; }
+  .bars .bar span { position:absolute; bottom:-16px; left:50%; transform:translateX(-50%); font-size:9px; color:var(--muted); white-space:nowrap; }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+</style>
+
+<header>☀️ PV Abrechnung</header>
+<main>
+  <div id="msg" class="msg"></div>
+
+  <div class="card">
+    <h2>Zähler</h2>
+    <div id="meters"></div>
+    <div class="row" style="margin-top:10px">
+      <div><label>Entität</label>
+        <select id="mEntity"></select></div>
+      <div><label>Name</label><input id="mName" placeholder="z.B. Zähler Wohnung 1" /></div>
+      <div style="max-width:170px"><label>Rolle</label>
+        <select id="mRole">
+          <option value="verbrauch">Verbrauch (Partei)</option>
+          <option value="netzbezug">Netzbezug</option>
+          <option value="einspeisung">Einspeisung</option>
+          <option value="erzeugung">PV-Erzeugung</option>
+        </select></div>
+      <div style="max-width:120px"><button onclick="addMeter()">+ Hinzufügen</button></div>
+    </div>
+    <p class="mini">Liste zeigt Entitäten mit Energie-Einheit (Wh/kWh). <a href="#" onclick="loadEntities();return false">neu laden</a></p>
+    <div class="legend">
+      <b>Rollen – was ordne ich zu?</b>
+      <ul>
+        <li><b>Verbrauch (Partei)</b>: Zähler einer Mietpartei/eines Abnehmers. Wird als <i>Kosten</i> berechnet.</li>
+        <li><b>Netzbezug</b>: aus dem öffentlichen Netz bezogene kWh (wenn PV nicht reicht). <i>Kosten</i>.</li>
+        <li><b>Einspeisung</b>: ins Netz eingespeiste kWh. Wird als <i>Gutschrift</i> gegengerechnet.</li>
+        <li><b>PV-Erzeugung</b>: von der Anlage produzierte kWh. Nur zur <i>Information</i>, kein Geldbetrag.</li>
+        <li><b>Lieferung an Kunde</b>: nur für virtuelle Zähler (z.B. Erzeugung − Einspeisung). Wird als <i>Kosten</i> berechnet.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Virtuelle Zähler</h2>
+    <p class="mini">Fortlaufende Rechen-Zähler aus echten Zählern, z.B. <b>an Kunde geliefert = Erzeugung − Einspeisung</b>. Laufen über Zählertausch/Störungen stetig weiter.</p>
+    <div id="vmeters"></div>
+    <div class="row" style="margin-top:10px">
+      <div><label>Name</label><input id="vName" placeholder="z.B. An Kunde geliefert" /></div>
+      <div style="max-width:190px"><label>Rolle</label>
+        <select id="vRole">
+          <option value="lieferung">Lieferung an Kunde</option>
+          <option value="verbrauch">Verbrauch (Partei)</option>
+          <option value="erzeugung">nur Information</option>
+        </select></div>
+    </div>
+    <label style="margin-top:8px">Komponenten (echte Zähler × Faktor)</label>
+    <div id="vComponents"></div>
+    <div class="row" style="margin-top:6px">
+      <div><select id="vCompEntity"></select></div>
+      <div style="max-width:110px"><select id="vCompFactor"><option value="1">+1 (plus)</option><option value="-1">−1 (minus)</option></select></div>
+      <div style="max-width:150px"><button class="sec" onclick="addComponent()">+ Komponente</button></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div style="max-width:200px"><button onclick="addVirtual()">+ Virt. Zähler anlegen</button></div>
+      <div style="max-width:230px"><button class="sec" onclick="presetDelivered()">Vorlage: Erzeugung − Einspeisung</button></div>
+    </div>
+    <p class="mini">Vorlage nutzt den ersten Zähler mit Rolle „PV-Erzeugung" (+1) und „Einspeisung" (−1).</p>
+  </div>
+
+  <div class="card">
+    <h2>Tarife</h2>
+    <p class="mini">Preise in Euro pro Kilowattstunde. Verbrauch/Netzbezug werden berechnet, Einspeisung wird gutgeschrieben (abgezogen).</p>
+    <div class="grid3">
+      <div>
+        <label>Verbrauch €/kWh</label><input id="tVerbrauch" type="number" step="0.001" />
+        <div class="hint">Preis, den eine Partei je kWh bezahlt (an sie gelieferter PV-/Reststrom).</div>
+      </div>
+      <div>
+        <label>Lieferung €/kWh</label><input id="tLieferung" type="number" step="0.001" />
+        <div class="hint">Preis je kWh für „an Kunde geliefert" (virtueller Zähler = Erzeugung − Einspeisung).</div>
+      </div>
+      <div>
+        <label>Netzbezug €/kWh</label><input id="tNetzbezug" type="number" step="0.001" />
+        <div class="hint">Preis je kWh, die aus dem öffentlichen Netz bezogen wurde.</div>
+      </div>
+      <div>
+        <label>Einspeisung €/kWh</label><input id="tEinspeisung" type="number" step="0.001" />
+        <div class="hint">Vergütung je ins Netz eingespeister kWh – wird als Gutschrift abgezogen.</div>
+      </div>
+      <div>
+        <label>Grundgebühr €/Periode</label><input id="tGrund" type="number" step="0.01" />
+        <div class="hint">Fester Betrag je Abrechnungszeitraum (z.B. Zähler-/Verwaltungspauschale).</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Empfänger & Versand</h2>
+    <label>Empfänger Reports (Komma-getrennt)</label><input id="recipients" placeholder="kunde@example.com, ..." />
+    <label>Empfänger Störungs-/Untersuchungsmails</label><input id="alertRecipients" placeholder="leer = wie oben" />
+    <div class="hint">Störungsmails (10 Min „wird untersucht", 2 Std „Störung") gehen hierhin – i.d.R. an dich als Betreuer, nicht an den Kunden.</div>
+    <div class="grid3" style="margin-top:6px">
+      <div><label>tägl. Bericht</label><select id="sDaily"><option value="false">aus</option><option value="true">an</option></select></div>
+      <div><label>monatl. Bericht</label><select id="sMonthly"><option value="true">an</option><option value="false">aus</option></select></div>
+      <div><label>jährl. Bericht</label><select id="sYearly"><option value="true">an</option><option value="false">aus</option></select></div>
+    </div>
+    <label>Versand-Uhrzeit (Stunde)</label><input id="sHour" type="number" min="0" max="23" style="max-width:100px" />
+  </div>
+
+  <div class="card">
+    <h2>SMTP</h2>
+    <div class="grid3">
+      <div><label>Host</label><input id="smtpHost" /></div>
+      <div><label>Port</label><input id="smtpPort" type="number" /></div>
+      <div><label>SSL (465)</label><select id="smtpSecure"><option value="false">nein (STARTTLS)</option><option value="true">ja</option></select></div>
+      <div><label>Benutzer</label><input id="smtpUser" /></div>
+      <div><label>Passwort</label><input id="smtpPass" type="password" /></div>
+      <div><label>Absender (From)</label><input id="smtpFrom" /></div>
+    </div>
+    <div style="margin-top:10px"><button class="sec" onclick="testSmtp()">SMTP testen</button></div>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-bottom:16px">
+    <button onclick="saveConfig()">💾 Speichern</button>
+    <button class="sec" onclick="pollNow()">Zähler jetzt lesen</button>
+  </div>
+
+  <div class="card" id="incidentCard" style="display:none">
+    <h2>⚠ Offene Störungen / Zählertausch</h2>
+    <p class="mini">Ein Zählerabfall wird untersucht. War es ein <b>Zählertausch</b>, hier bestätigen – der (virtuelle) Zähler läuft dann nahtlos weiter. Sonst liegt ein technischer Fehler vor.</p>
+    <div id="incidents"></div>
+  </div>
+
+  <div class="card">
+    <h2>Statistik (Direktansicht)</h2>
+    <div class="row">
+      <div style="max-width:160px"><label>Auflösung</label>
+        <select id="statGran"><option value="day">Tage</option><option value="month">Monate</option></select></div>
+      <div style="max-width:120px"><label>Anzahl</label><input id="statCount" type="number" min="1" max="366" value="30" /></div>
+      <div style="max-width:150px"><button class="sec" onclick="loadStats()">Anzeigen</button></div>
+      <div style="flex:2"><label>&nbsp;</label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text)">
+          <input type="checkbox" id="useStats" style="width:auto" /> HA-Statistik bevorzugen (reset-sicher, überlebt Ausfallzeiten; sonst nur eigenes Polling)</label>
+      </div>
+    </div>
+    <div id="statChart"></div>
+    <div id="statTable" class="mini">Noch keine Daten – „Anzeigen" klicken.</div>
+  </div>
+
+  <div class="card">
+    <h2>Bericht</h2>
+    <div class="row">
+      <div style="max-width:180px"><label>Zeitraum</label>
+        <select id="pType"><option value="month">Vormonat</option><option value="day">Gestern</option><option value="year">Vorjahr</option></select></div>
+      <div style="max-width:150px"><button class="sec" onclick="preview()">Vorschau</button></div>
+      <div style="max-width:170px"><button onclick="sendNow()">Jetzt versenden</button></div>
+    </div>
+    <div id="previewWrap" style="margin-top:12px;display:none"><iframe id="preview"></iframe></div>
+  </div>
+
+  <div class="card">
+    <h2>Status</h2>
+    <div id="status" class="mini">–</div>
+  </div>
+</main>
+
+<script src="app.js"></script>

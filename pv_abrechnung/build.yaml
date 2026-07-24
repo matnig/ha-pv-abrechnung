@@ -1,0 +1,8 @@
+# Basis-Images je Architektur (node ist multi-arch). Der Supervisor reicht den
+# passenden Wert als BUILD_FROM in den Dockerfile.
+build_from:
+  aarch64: node:20-alpine
+  amd64: node:20-alpine
+  armv7: node:20-alpine
+  armhf: node:20-alpine
+  i386: node:20-alpine

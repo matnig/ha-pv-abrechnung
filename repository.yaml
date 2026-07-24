@@ -1,0 +1,5 @@
+# Home-Assistant-Add-on-Repository. In HA hinzufügen über:
+# Einstellungen → Add-ons → Add-on Store → ⋮ (oben rechts) → Repositories
+name: PV Abrechnung Add-ons
+url: "https://github.com/matnig/ha-pv-abrechnung"
+maintainer: matnig
