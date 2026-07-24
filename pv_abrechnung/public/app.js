@@ -104,7 +104,14 @@ async function vmBackfill(i) {
   await saveConfig();
   try {
     const r = await api('api/virtual/' + encodeURIComponent(vm.id) + '/backfill', { method: 'POST', body: JSON.stringify({ startDate: vm.startDate }) });
-    flash(`Rückwirkend berechnet ab ${r.startDate}: ${r.days} Tage, aktueller Stand ${r.currentStand} kWh.`);
+    const det = (r.components || []).map((c) => `${entityName(c.entityId)} (${c.factor > 0 ? '+' : ''}${c.factor}): Δ ${c.delta} kWh`).join(' · ');
+    flash(`Berechnet ab ${r.startDate} (${r.days} Tage). Stand: ${r.currentStand} kWh. — ${det}`);
+    $('vmeters').insertAdjacentHTML(
+      'afterend',
+      `<div class="hint" id="vmDetail" style="margin-top:6px">Aufschlüsselung ${vm.name}: ${det}. „geliefert" = Summe der faktorisierten Zuwächse, bei 0 gedeckelt.</div>`
+    );
+    const old = document.querySelectorAll('#vmDetail');
+    if (old.length > 1) old[0].remove();
     loadStatus();
   } catch (e) {
     flash('Rückwirkende Berechnung fehlgeschlagen: ' + e.message, false);

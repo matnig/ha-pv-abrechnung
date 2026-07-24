@@ -2,6 +2,12 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.12 – 2026-07-24
+
+- **Aufschlüsselung bei „berechnen":** zeigt jetzt je Komponente den tatsächlichen Zuwachs (Δ kWh)
+  im Zeitraum. Damit ist sofort erkennbar, warum ein virtueller Zähler ggf. 0 ergibt (z.B. wenn der
+  als „Erzeugung" gewählte Sensor in Wahrheit die Netzeinspeisung misst).
+
 ## 0.1.11 – 2026-07-24
 
 ### Behoben (Browser-Cache)

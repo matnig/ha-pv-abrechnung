@@ -127,7 +127,27 @@ async function backfillVirtual(vm, ha, snapshots) {
   if (last != null) ventry.lastEffective = daily[last];
   snapshots[vkey] = ventry;
 
-  return { startDate, earliest, days: Object.keys(daily).length, first: sortedDates[0] || null, last, currentStand: ventry.lastEffective ?? null };
+  // Aufschlüsselung je Komponente (für die Diagnose): wie viel hat jeder Zähler beigetragen?
+  const componentsInfo = comps.map((comp) => {
+    const cn = valueAtOrBefore(cum[comp.entityId], last || toDateStr(now));
+    return {
+      entityId: comp.entityId,
+      factor: Number(comp.factor || 0),
+      baseline: round3(baseline[comp.entityId]),
+      current: cn != null ? round3(cn) : null,
+      delta: cn != null ? round3(cn - baseline[comp.entityId]) : null,
+    };
+  });
+
+  return {
+    startDate,
+    earliest,
+    days: Object.keys(daily).length,
+    first: sortedDates[0] || null,
+    last,
+    currentStand: ventry.lastEffective ?? null,
+    components: componentsInfo,
+  };
 }
 
 module.exports = { backfillVirtual, earliestCommonDate, componentDailyCum, valueAtOrBefore, round3 };
