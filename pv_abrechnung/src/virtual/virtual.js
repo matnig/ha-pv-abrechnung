@@ -37,14 +37,26 @@ async function unitFactor(entityId, ha, snapshots) {
 }
 
 // Kumulierte Tageswerte (kWh) einer Komponente aus der LTS: { 'YYYY-MM-DD': cumKwh }.
+// Nutzt den echten Zählerstand `state` (Bucket-Ende), NICHT `sum`: `sum` wird von HA bei
+// 0-Aussetzern/Resets aufgebläht (jeder Rücksprung addiert den vollen Wert erneut). Zusätzlich
+// wird Monotonie erzwungen, um transiente 0-/Rückwärts-Glitches abzufangen.
 async function componentDailyCum(entityId, startISO, endISO, ha, snapshots) {
   const res = await ha.statisticsDuringPeriod([entityId], startISO, endISO, 'day');
   const rows = (res && res[entityId]) || [];
   const factor = await unitFactor(entityId, ha, snapshots);
-  const byDate = {};
+  const pairs = [];
   for (const r of rows) {
-    if (r.sum == null) continue;
-    byDate[toDateStr(new Date(bucketStartMs(r)))] = Number(r.sum) * factor;
+    const raw = r.state != null ? r.state : r.sum; // bevorzugt Zählerstand, Fallback sum
+    if (raw == null) continue;
+    pairs.push({ date: toDateStr(new Date(bucketStartMs(r))), val: Number(raw) * factor });
+  }
+  pairs.sort((a, b) => (a.date < b.date ? -1 : 1));
+  const byDate = {};
+  let running = null;
+  for (const p of pairs) {
+    if (running == null || p.val >= running) running = p.val; // Anstieg übernehmen
+    // Rückwärts-Glitch (z.B. kurz 0) -> Stand halten
+    byDate[p.date] = running;
   }
   return byDate;
 }

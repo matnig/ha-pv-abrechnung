@@ -2,6 +2,15 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.13 – 2026-07-24
+
+### Behoben (virtueller Zähler ergab fälschlich 0)
+- Die rückwirkende Berechnung nutzte das HA-Statistikfeld `sum`. Bei Zählern mit 0-Aussetzern
+  (z.B. Tasmota springt kurz auf 0 und zurück) bläht HA die `sum` auf – jeder Rücksprung wird als
+  neuer Verbrauch addiert. Dadurch wurde der virtuelle Zähler massiv negativ und auf 0 gedeckelt.
+- Jetzt wird der echte **Zählerstand (`state`)** verwendet, mit **erzwungener Monotonie** (transiente
+  0-/Rückwärts-Glitches werden abgefangen). Ergebnis stimmt jetzt (geliefert = Δ-Erzeugung − Δ-Einspeisung).
+
 ## 0.1.12 – 2026-07-24
 
 - **Aufschlüsselung bei „berechnen":** zeigt jetzt je Komponente den tatsächlichen Zuwachs (Δ kWh)
