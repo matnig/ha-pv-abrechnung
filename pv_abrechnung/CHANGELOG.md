@@ -2,6 +2,13 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.4 – 2026-07-24
+
+### Behoben
+- **Aussagekräftige Fehlermeldung** beim Laden der Entitätenliste (vorher leer): HA-Aufrufe haben
+  jetzt einen **Timeout** (statt bei Problemen hängen zu bleiben und einen leeren 502 zu erzeugen),
+  die Fehlermeldung enthält jetzt den HTTP-Status, und der Fehler wird ins Add-on-Log geschrieben.
+
 ## 0.1.3 – 2026-07-24
 
 - Versions-Bump, damit Home Assistant das Update sicher anbietet. Inhaltlich identisch mit 0.1.2

@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const api = async (path, opts) => {
   const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || res.statusText);
+  if (!res.ok) throw new Error(data.error || res.statusText || `HTTP ${res.status}`);
   return data;
 };
 function flash(text, ok = true) {

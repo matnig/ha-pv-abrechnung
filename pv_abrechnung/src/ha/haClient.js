@@ -19,10 +19,23 @@ function wsUrl() {
   return base.replace(/^http/, 'ws') + '/api/websocket';
 }
 
+// Authentifizierter Fetch mit Timeout, damit ein hängender Supervisor-Aufruf nicht
+// die ganze Anfrage blockiert (sonst leerer 502 vom Ingress-Proxy).
+async function authedFetch(url, timeoutMs = 15000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { headers: { Authorization: `Bearer ${token()}` }, signal: ctrl.signal });
+  } catch (e) {
+    if (e && e.name === 'AbortError') throw new Error(`HA-Anfrage Zeitüberschreitung nach ${timeoutMs / 1000}s`);
+    throw new Error('HA nicht erreichbar: ' + (e && e.message ? e.message : String(e)));
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function getState(entityId) {
-  const res = await fetch(`${httpBase()}/states/${encodeURIComponent(entityId)}`, {
-    headers: { Authorization: `Bearer ${token()}` },
-  });
+  const res = await authedFetch(`${httpBase()}/states/${encodeURIComponent(entityId)}`);
   if (!res.ok) throw new Error(`HA getState(${entityId}) -> HTTP ${res.status}`);
   return res.json();
 }
@@ -42,8 +55,8 @@ function unitFactorToKwh(unit) {
 
 // Kandidaten für Energiezähler: Einheit Wh/kWh/MWh ODER device_class "energy".
 async function listEnergyEntities() {
-  const res = await fetch(`${httpBase()}/states`, { headers: { Authorization: `Bearer ${token()}` } });
-  if (!res.ok) throw new Error(`HA /states -> HTTP ${res.status} (${res.statusText || ''})`);
+  const res = await authedFetch(`${httpBase()}/states`);
+  if (!res.ok) throw new Error(`HA /states -> HTTP ${res.status} ${res.statusText || ''}`.trim());
   const all = await res.json();
   if (!Array.isArray(all)) throw new Error('Unerwartete Antwort von HA (/states ist keine Liste)');
   return all

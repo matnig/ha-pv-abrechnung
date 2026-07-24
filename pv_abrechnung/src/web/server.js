@@ -45,7 +45,8 @@ function createServer() {
     try {
       res.json(await listEnergyEntities());
     } catch (err) {
-      res.status(502).json({ error: String(err.message || err) });
+      console.error('[api/entities]', err && err.message ? err.message : err);
+      res.status(502).json({ error: 'Entitäten von HA konnten nicht geladen werden: ' + String(err.message || err) });
     }
   });
 
