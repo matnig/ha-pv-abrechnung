@@ -4,17 +4,23 @@ const WebSocket = require('ws');
 
 // Im Add-on: Zugriff über den Supervisor-Proxy mit SUPERVISOR_TOKEN.
 // Lokal (Dev): HA_URL + HA_TOKEN (Long-Lived-Token) setzen.
+// Der Supervisor stellt den Add-on-Token je nach Version als SUPERVISOR_TOKEN
+// (neu) oder HASSIO_TOKEN (alt) bereit – beide akzeptieren.
+function supervisorToken() {
+  return process.env.SUPERVISOR_TOKEN || process.env.HASSIO_TOKEN || '';
+}
+
 function token() {
-  return process.env.SUPERVISOR_TOKEN || process.env.HA_TOKEN || '';
+  return supervisorToken() || process.env.HA_TOKEN || '';
 }
 
 function httpBase() {
-  if (process.env.SUPERVISOR_TOKEN) return 'http://supervisor/core/api';
+  if (supervisorToken()) return 'http://supervisor/core/api';
   return (process.env.HA_URL || 'http://homeassistant.local:8123').replace(/\/+$/, '') + '/api';
 }
 
 function wsUrl() {
-  if (process.env.SUPERVISOR_TOKEN) return 'ws://supervisor/core/websocket';
+  if (supervisorToken()) return 'ws://supervisor/core/websocket';
   const base = (process.env.HA_URL || 'http://homeassistant.local:8123').replace(/\/+$/, '');
   return base.replace(/^http/, 'ws') + '/api/websocket';
 }

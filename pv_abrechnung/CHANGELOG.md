@@ -2,6 +2,14 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.6 – 2026-07-24
+
+### Behoben
+- **401 Unauthorized beim HA-Zugriff / leere Entitätenliste:** Der Add-on-Token wird jetzt sowohl
+  als `SUPERVISOR_TOKEN` (neu) als auch als `HASSIO_TOKEN` (älterer Supervisor) erkannt. Vorher
+  fiel das Add-on ohne Token auf die externe HA-URL zurück → 401.
+- Selbsttest zeigt jetzt, welche Token-/Env-Variablen tatsächlich vorhanden sind.
+
 ## 0.1.5 – 2026-07-24
 
 ### Diagnose

@@ -11,7 +11,10 @@ const PORT = Number(process.env.INGRESS_PORT) || 8099;
 // Einmaliger Selbsttest der HA-API beim Start – schreibt das Ergebnis klar ins Protokoll,
 // damit Verbindungs-/Berechtigungsprobleme sofort sichtbar sind (ohne Klick in der UI).
 async function haSelfCheck() {
-  console.log(`[startup] SUPERVISOR_TOKEN vorhanden: ${process.env.SUPERVISOR_TOKEN ? 'ja' : 'NEIN'} · API-Basis: ${haClient.httpBase()}`);
+  const relevant = Object.keys(process.env).filter((k) => /token|hassio|supervisor|ingress/i.test(k));
+  console.log(`[startup] Token-Env vorhanden: SUPERVISOR_TOKEN=${process.env.SUPERVISOR_TOKEN ? 'ja' : 'nein'}, HASSIO_TOKEN=${process.env.HASSIO_TOKEN ? 'ja' : 'nein'}`);
+  console.log(`[startup] Relevante Env-Variablen: ${relevant.join(', ') || '(keine)'}`);
+  console.log(`[startup] API-Basis: ${haClient.httpBase()}`);
   try {
     const list = await haClient.listEnergyEntities();
     console.log(`[startup] HA-API OK – ${list.length} Energie-Entitäten (Wh/kWh/MWh oder device_class energy) gefunden`);
