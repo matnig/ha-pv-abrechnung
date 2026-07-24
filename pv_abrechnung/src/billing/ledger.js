@@ -32,6 +32,7 @@ function contentOf(e) {
     recipients: e.recipients,
     correction: e.correction,
     monthly: e.monthly || null,
+    stammdaten: e.stammdaten || undefined, // undefined -> von JSON.stringify weggelassen (alte Belege bleiben gültig)
     prevHash: e.prevHash,
   });
 }
@@ -72,6 +73,7 @@ function buildEntry(billing, config, meta = {}) {
     recipients: meta.recipients || config.recipients || [],
     correction: !!meta.correction,
     monthly: billing.monthly || null,
+    stammdaten: billing.stammdaten && (billing.stammdaten.anlagenName || billing.stammdaten.betreiber || billing.stammdaten.kunde) ? billing.stammdaten : undefined,
     prevHash: prev ? prev.hash : '0',
   };
   entry.hash = hashEntry(entry);

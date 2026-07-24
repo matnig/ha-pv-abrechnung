@@ -26,6 +26,9 @@ const DEFAULT_CONFIG = {
     netzpreis: 0, // €/kWh Netzbetreiber-Strompreis (Vergleich für Ersparnis; 0 = keine Ersparnis-Anzeige)
   },
   showInfoStats: true, // informative Statistik (Autarkiegrad, Ersparnis) im Bericht anzeigen
+  anlagenName: '', // Name der PV-Anlage (im Betreff + Bericht + CSV)
+  betreiber: '', // Anlagenbetreiber (Name/Anschrift, mehrzeilig möglich)
+  kunde: '', // Kunde/Mieter (Name/Anschrift, mehrzeilig möglich)
   recipients: [], // Empfänger der Abrechnungs-Reports
   alertRecipients: [], // Empfänger der Störungs-/Untersuchungsmails (leer -> wie recipients)
   reportFooter: '', // frei ausfüllbare Fußzeile/Impressum unter jedem Bericht (bleibt in /data, nicht im Repo)
@@ -57,6 +60,9 @@ function loadConfig() {
     virtualMeters: cfg.virtualMeters || [],
     alertRecipients: cfg.alertRecipients || [],
     reportFooter: cfg.reportFooter || '',
+    anlagenName: cfg.anlagenName || '',
+    betreiber: cfg.betreiber || '',
+    kunde: cfg.kunde || '',
     useStatistics: cfg.useStatistics !== false,
     tariffs: { ...DEFAULT_CONFIG.tariffs, ...(cfg.tariffs || {}) },
     smtp: { ...DEFAULT_CONFIG.smtp, ...(cfg.smtp || {}) },

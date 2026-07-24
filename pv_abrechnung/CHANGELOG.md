@@ -2,6 +2,13 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.24 – 2026-07-24
+
+### Stammdaten
+- Neue Felder **Anlagenname, Betreiber, Kunde** (UI-Karte „Stammdaten", Betreiber/Kunde mehrzeilig).
+- Erscheinen im **Bericht-Kopf**, im **Betreff** (Anlagenname) und in der **CSV**.
+- Werden im Beleg **mit eingefroren** (bleiben also auf einer abgeschlossenen Rechnung erhalten).
+
 ## 0.1.23 – 2026-07-24
 
 - Test-Bump zur Bestätigung der Store-Cache-Verzögerung im Supervisor (HA zeigt „neueste Version"

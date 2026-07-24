@@ -26,7 +26,8 @@ function subject(billing) {
   const p = billing.period;
   const label = { day: 'Tagesbericht', month: 'Monatsbericht', year: 'Jahresbericht' }[p.type] || 'Bericht';
   const incomplete = p.end.getTime() > (billing.generatedAt || Date.now());
-  return `PV-Abrechnung – ${label} ${p.label}${incomplete ? ' (nicht abgeschlossen)' : ''}`;
+  const anlage = billing.stammdaten && billing.stammdaten.anlagenName ? ' ' + billing.stammdaten.anlagenName : '';
+  return `PV-Abrechnung${anlage} – ${label} ${p.label}${incomplete ? ' (nicht abgeschlossen)' : ''}`;
 }
 
 function monthlyPrimaryKwh(m) {
@@ -124,6 +125,7 @@ function buildPriceTransparency(billing) {
 function buildHtml(billing) {
   const p = billing.period;
   const t = billing.totals;
+  const sd = billing.stammdaten || {};
   const incomplete = p.end.getTime() > (billing.generatedAt || Date.now());
   const periodWord = { day: 'Tag', month: 'Monat', year: 'Jahr' }[p.type] || 'Zeitraum';
   const periodArticle = { day: 'der', month: 'der', year: 'das' }[p.type] || 'der';
@@ -188,11 +190,20 @@ function buildHtml(billing) {
 
   return `<!doctype html><html><body style="font-family:system-ui,Arial,sans-serif;color:#222;max-width:820px">
     <h2 style="margin-bottom:2px">PV-Abrechnung</h2>
+    ${sd.anlagenName ? `<div style="font-size:15px;color:#333;margin-bottom:6px">Anlage: <b>${esc(sd.anlagenName)}</b></div>` : ''}
     ${incompleteBanner}
     ${banner}
     <div style="color:#666">${periodWord}: <b>${esc(p.label)}</b> &nbsp;(${fmt(p.start)} – ${fmt(
       new Date(p.end.getTime() - 1)
     )})${incomplete ? ' <span style="color:#dc2626;font-weight:600">· vorläufig, nicht abgeschlossen</span>' : ''}</div>
+    ${
+      sd.betreiber || sd.kunde
+        ? `<table style="margin-top:12px;font-size:13px;border-collapse:collapse"><tr>
+             <td style="vertical-align:top;padding-right:32px"><div style="color:#888">Betreiber</div>${esc(sd.betreiber).replace(/\n/g, '<br>') || '–'}</td>
+             <td style="vertical-align:top"><div style="color:#888">Kunde</div>${esc(sd.kunde).replace(/\n/g, '<br>') || '–'}</td>
+           </tr></table>`
+        : ''
+    }
     <table style="border-collapse:collapse;width:100%;margin-top:16px;font-size:14px">
       <thead><tr style="background:#f3f4f6;text-align:left">
         <th style="padding:6px">Zähler</th><th>Rolle</th>
@@ -242,7 +253,11 @@ function csvCell(v) {
 function buildCsv(billing) {
   const p = billing.period;
   const incomplete = p.end.getTime() > (billing.generatedAt || Date.now());
+  const sd = billing.stammdaten || {};
   const out = [];
+  if (sd.anlagenName) out.push(csvCell('Anlage') + ';' + csvCell(sd.anlagenName));
+  if (sd.betreiber) out.push(csvCell('Betreiber') + ';' + csvCell(sd.betreiber.replace(/\n/g, ' ')));
+  if (sd.kunde) out.push(csvCell('Kunde') + ';' + csvCell(sd.kunde.replace(/\n/g, ' ')));
   out.push(csvCell('Zeitraum') + ';' + csvCell(`${p.type} ${p.label}`));
   out.push(csvCell('Status') + ';' + csvCell(incomplete ? 'NICHT ABGESCHLOSSEN (vorläufig)' : 'abgeschlossen'));
   out.push('');

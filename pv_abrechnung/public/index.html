@@ -46,6 +46,16 @@
   </div>
 
   <div class="card">
+    <h2>Stammdaten</h2>
+    <p class="mini">Erscheinen im Bericht (Kopf), im Betreff und in der CSV. Betreiber/Kunde dürfen mehrzeilig sein (Name, Anschrift).</p>
+    <label>Anlagenname</label><input id="anlagenName" placeholder="z.B. PV-Anlage Musterstraße 1" />
+    <div class="grid3" style="margin-top:6px">
+      <div><label>Betreiber (Name/Anschrift)</label><textarea id="betreiber" rows="3" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:14px;font-family:inherit" placeholder="Anlagenbetreiber…"></textarea></div>
+      <div><label>Kunde (Name/Anschrift)</label><textarea id="kunde" rows="3" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:14px;font-family:inherit" placeholder="Kunde/Mieter…"></textarea></div>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Zähler</h2>
     <div id="meters"></div>
     <div class="row" style="margin-top:10px">

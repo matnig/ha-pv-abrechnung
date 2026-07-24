@@ -67,6 +67,10 @@ async function runReport(period, opts = {}) {
   billing.footer = (config.reportFooter || '').trim();
   billing.tariffs = config.tariffs || {};
   billing.showInfoStats = config.showInfoStats !== false;
+  // Stammdaten: bei abgeschlossener Periode aus dem Beleg (eingefroren), sonst aus der Config.
+  billing.stammdaten = finalized
+    ? finalized.stammdaten || { anlagenName: '', betreiber: '', kunde: '' }
+    : { anlagenName: config.anlagenName || '', betreiber: config.betreiber || '', kunde: config.kunde || '' };
 
   // Beim Versand einer noch nicht abgeschlossenen Periode: Beleg vorbereiten (Prüfsumme steht dann
   // schon in der Mail); nach erfolgreichem Versand wird er ins Journal geschrieben.

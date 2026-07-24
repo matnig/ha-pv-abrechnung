@@ -175,6 +175,9 @@ function fillForm() {
   $('recipients').value = (config.recipients || []).join(', ');
   $('alertRecipients').value = (config.alertRecipients || []).join(', ');
   $('reportFooter').value = config.reportFooter || '';
+  $('anlagenName').value = config.anlagenName || '';
+  $('betreiber').value = config.betreiber || '';
+  $('kunde').value = config.kunde || '';
   $('sDaily').value = String(!!s.daily); $('sMonthly').value = String(!!s.monthly);
   $('sYearly').value = String(!!s.yearly); $('sHour').value = s.hour;
   $('smtpHost').value = sm.host; $('smtpPort').value = sm.port; $('smtpSecure').value = String(!!sm.secure);
@@ -197,6 +200,9 @@ function collectForm() {
   config.recipients = $('recipients').value.split(',').map((x) => x.trim()).filter(Boolean);
   config.alertRecipients = $('alertRecipients').value.split(',').map((x) => x.trim()).filter(Boolean);
   config.reportFooter = $('reportFooter').value;
+  config.anlagenName = $('anlagenName').value;
+  config.betreiber = $('betreiber').value;
+  config.kunde = $('kunde').value;
   config.schedule = {
     daily: $('sDaily').value === 'true', monthly: $('sMonthly').value === 'true',
     yearly: $('sYearly').value === 'true', hour: +$('sHour').value,
