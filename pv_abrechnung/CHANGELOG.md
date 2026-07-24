@@ -2,6 +2,10 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.25 – 2026-07-24
+
+- Phantom-Bump (Store-Cache-Workaround). Inhaltlich identisch mit 0.1.24 (Stammdaten).
+
 ## 0.1.24 – 2026-07-24
 
 ### Stammdaten
