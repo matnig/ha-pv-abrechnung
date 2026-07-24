@@ -43,7 +43,15 @@ async function pollOnce(config, opts = {}) {
     let reading;
     try {
       const st = await getState(meter.entityId);
-      reading = { raw: st.state, available: !UNAVAILABLE.has(st.state), now };
+      const unit = (st.attributes && st.attributes.unit_of_measurement) || '';
+      const factor = haClient.unitFactorToKwh(unit);
+      entry.unit = unit;
+      entry.unitFactor = factor;
+      const available = !UNAVAILABLE.has(st.state);
+      // Rohwert immer auf kWh normalisieren (Wh/MWh -> kWh), damit alle Berechnungen in kWh laufen.
+      const n = Number(String(st.state).replace(',', '.'));
+      const rawKwh = available && Number.isFinite(n) ? n * factor : st.state;
+      reading = { raw: rawKwh, available, now };
     } catch (err) {
       reading = { raw: null, available: false, now };
       entry.anomalies.push({ type: 'error', at: now, message: String(err.message || err) });

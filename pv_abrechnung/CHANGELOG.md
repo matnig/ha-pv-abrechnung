@@ -2,6 +2,15 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.2 – 2026-07-24
+
+### Geändert / Behoben
+- **Wh und MWh werden unterstützt.** Die Entitätenliste akzeptiert jetzt Wh, kWh und MWh
+  (sowie Entitäten mit `device_class: energy`). Alle Werte werden intern auf **kWh normalisiert**,
+  damit Abrechnung und Statistik unabhängig von der Sensor-Einheit stimmen.
+- Entitätenliste robuster: klarere Fehlermeldung bei HA-Problemen, Schutz vor unerwarteten Antworten.
+- Zähler-Einheit wird in der Zählerliste angezeigt.
+
 ## 0.1.1 – 2026-07-24
 
 ### Behoben

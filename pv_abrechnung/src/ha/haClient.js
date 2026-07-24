@@ -27,21 +27,41 @@ async function getState(entityId) {
   return res.json();
 }
 
-// Alle Entitäten, deren Einheit auf Wh/kWh/MWh endet -> Kandidaten für Energiezähler.
+// Energie-Einheit? Akzeptiert Wh, kWh und MWh (case-insensitiv, mit/ohne Leerzeichen).
+function isEnergyUnit(unit) {
+  return /^(wh|kwh|mwh)$/i.test(String(unit || '').trim());
+}
+
+// Umrechnungsfaktor der Einheit auf kWh (Grundlage aller Berechnungen).
+function unitFactorToKwh(unit) {
+  const u = String(unit || '').trim().toLowerCase();
+  if (u === 'wh') return 0.001;
+  if (u === 'mwh') return 1000;
+  return 1; // kWh oder unbekannt -> als kWh behandeln
+}
+
+// Kandidaten für Energiezähler: Einheit Wh/kWh/MWh ODER device_class "energy".
 async function listEnergyEntities() {
   const res = await fetch(`${httpBase()}/states`, { headers: { Authorization: `Bearer ${token()}` } });
-  if (!res.ok) throw new Error(`HA listStates -> HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`HA /states -> HTTP ${res.status} (${res.statusText || ''})`);
   const all = await res.json();
+  if (!Array.isArray(all)) throw new Error('Unerwartete Antwort von HA (/states ist keine Liste)');
   return all
-    .filter((s) => /wh$/i.test((s.attributes && s.attributes.unit_of_measurement) || ''))
-    .map((s) => ({
-      entityId: s.entity_id,
-      name: (s.attributes && s.attributes.friendly_name) || s.entity_id,
-      unit: s.attributes.unit_of_measurement,
-      deviceClass: s.attributes.device_class || null,
-      stateClass: s.attributes.state_class || null,
-      state: s.state,
-    }))
+    .filter((s) => {
+      const a = s.attributes || {};
+      return isEnergyUnit(a.unit_of_measurement) || a.device_class === 'energy';
+    })
+    .map((s) => {
+      const a = s.attributes || {};
+      return {
+        entityId: s.entity_id,
+        name: a.friendly_name || s.entity_id,
+        unit: a.unit_of_measurement || '',
+        deviceClass: a.device_class || null,
+        stateClass: a.state_class || null,
+        state: s.state,
+      };
+    })
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -101,4 +121,4 @@ function statisticsDuringPeriod(statisticIds, startISO, endISO, period = 'day') 
   });
 }
 
-module.exports = { getState, listEnergyEntities, statisticsDuringPeriod, httpBase, wsUrl };
+module.exports = { getState, listEnergyEntities, statisticsDuringPeriod, isEnergyUnit, unitFactorToKwh, httpBase, wsUrl };

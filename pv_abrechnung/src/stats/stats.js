@@ -100,11 +100,12 @@ async function getSeries(config, opts = {}) {
         const res = await ha.statisticsDuringPeriod([meter.entityId], startISO, endISO, granularity);
         const rows = (res && res[meter.entityId]) || [];
         if (rows.length) {
+          const factor = ((opts.snapshots && opts.snapshots[meter.entityId]) || {}).unitFactor || 1;
           map = {};
           for (const b of buckets) map[b.key] = null;
           for (const r of rows) {
             const k = keyFn(bucketStartMs(r));
-            if (k in map && r.change != null) map[k] = round2((map[k] || 0) + Number(r.change));
+            if (k in map && r.change != null) map[k] = round2((map[k] || 0) + Number(r.change) * factor);
           }
           source = 'statistics';
         }

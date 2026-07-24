@@ -35,7 +35,7 @@ function renderMeters() {
     ? `<table><thead><tr><th>Name</th><th>Entität</th><th>Rolle</th><th></th></tr></thead><tbody>${config.meters
         .map(
           (m, i) =>
-            `<tr><td>${m.name}</td><td class="tag">${m.entityId}</td><td>${m.role}</td>
+            `<tr><td>${m.name}</td><td class="tag">${m.entityId}${m.unit ? ' · ' + m.unit : ''}</td><td>${m.role}</td>
              <td><button class="danger" onclick="delMeter(${i})">×</button></td></tr>`
         )
         .join('')}</tbody></table>`
@@ -45,8 +45,9 @@ function renderMeters() {
 function addMeter() {
   const entityId = $('mEntity').value;
   if (!entityId) return flash('Keine Entität gewählt', false);
+  const ent = entities.find((e) => e.entityId === entityId);
   config.meters = config.meters || [];
-  config.meters.push({ id: 'm' + Date.now(), name: $('mName').value || entityId, entityId, role: $('mRole').value });
+  config.meters.push({ id: 'm' + Date.now(), name: $('mName').value || entityId, entityId, role: $('mRole').value, unit: ent ? ent.unit : '' });
   $('mName').value = '';
   renderMeters();
 }

@@ -48,7 +48,7 @@ function meterBase(meter) {
  * Fällt `change` weg (ältere HA-Version), wird die Differenz der `sum`-Werte genutzt.
  * @returns {null|{anfang:number|null, ende:number|null, kwh:number}}
  */
-async function fromStatistics(entityId, period, ha) {
+async function fromStatistics(entityId, period, ha, factor = 1) {
   const startISO = new Date(period.start.getTime() - DAY_MS).toISOString(); // ein Tag Vorlauf für Anfangsstand
   const endISO = period.end.toISOString();
   const res = await ha.statisticsDuringPeriod([entityId], startISO, endISO, 'day');
@@ -84,7 +84,12 @@ async function fromStatistics(entityId, period, ha) {
     if (firstSum != null && lastSum != null) kwh = lastSum - firstSum;
     else return null; // keine verwertbaren Daten
   }
-  return { anfang, ende, kwh: round2(kwh) };
+  // LTS-Werte sind in der Roh-Einheit des Sensors -> auf kWh normalisieren.
+  return {
+    anfang: anfang != null ? round2(anfang * factor) : null,
+    ende: ende != null ? round2(ende * factor) : null,
+    kwh: round2(kwh * factor),
+  };
 }
 
 /**
@@ -106,7 +111,8 @@ async function resolvePeriodReadings(config, snapshots, period, opts = {}) {
 
     if (useStats) {
       try {
-        stats = await fromStatistics(meter.entityId, period, ha);
+        const factor = (snapshots[meter.entityId] || {}).unitFactor || 1;
+        stats = await fromStatistics(meter.entityId, period, ha, factor);
       } catch (err) {
         warnings.push('HA-Statistik nicht erreichbar, Fallback Polling: ' + (err.message || err));
       }
