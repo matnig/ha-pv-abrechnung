@@ -13,6 +13,10 @@ RUN npm install --omit=dev --no-audit --no-fund
 COPY src ./src
 COPY public ./public
 
+# Add-on-Version (vom Supervisor als Build-Arg übergeben) in die Laufzeit übernehmen,
+# damit sie in der Oberfläche angezeigt werden kann.
+ARG BUILD_VERSION
+ENV APP_VERSION=${BUILD_VERSION}
 ENV NODE_ENV=production
 # WICHTIG: Die HA-Base nutzt s6-overlay (/init als Entrypoint) und setzt die Umgebung zurück.
 # Ohne dies bekommt der CMD-Prozess KEINE Container-Env – insbesondere fehlt SUPERVISOR_TOKEN,

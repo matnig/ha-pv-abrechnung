@@ -344,7 +344,17 @@ async function loadStatus() {
   }
 }
 
+async function loadVersion() {
+  try {
+    const v = await api('api/version');
+    $('ver').textContent = 'v' + v.version;
+  } catch {
+    /* egal */
+  }
+}
+
 async function init() {
+  loadVersion();
   try {
     config = await api('api/config');
     fillForm();

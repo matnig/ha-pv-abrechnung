@@ -2,6 +2,11 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.1.10 – 2026-07-24
+
+- **Versionsnummer wird oben rechts in der Oberfläche angezeigt** – so ist sofort erkennbar,
+  welche Version tatsächlich läuft (hilft, „Add-on aktualisiert?" von „Browser-Cache" zu trennen).
+
 ## 0.1.9 – 2026-07-24
 
 ### Virtuelle Zähler: nie negativ + rückwirkende Berechnung

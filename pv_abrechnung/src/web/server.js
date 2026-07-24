@@ -30,6 +30,8 @@ function createServer() {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
 
+  app.get('/api/version', (req, res) => res.json({ version: process.env.APP_VERSION || 'dev' }));
+
   app.get('/api/config', (req, res) => res.json(loadConfig()));
 
   app.put('/api/config', (req, res) => {
