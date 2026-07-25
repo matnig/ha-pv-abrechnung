@@ -79,6 +79,67 @@ function attachReviews(anomalies) {
   return (anomalies || []).map((a) => ({ ...a, id: anomalyId(a), review: reviews[anomalyId(a)] || null }));
 }
 
+// Auffälligkeiten eines Zeitbereichs (für den manuellen Export). Verändert NICHTS am
+// inkrementellen Versand – bereits dokumentierte Einträge werden mitgeliefert und nur
+// gekennzeichnet, reportedAt wird hier nie gesetzt.
+function listAnomaliesInRange(fromMs, toMs, opts = {}) {
+  const from = Number(fromMs);
+  const to = Number(toMs);
+  return listAnomalies(opts).filter((a) => {
+    const t = Number(a.at) || 0;
+    return (!Number.isFinite(from) || t >= from) && (!Number.isFinite(to) || t <= to);
+  });
+}
+
+const ANOMALY_CSV_TEXT = {
+  meter_swap: 'Zählertausch (manuell bestätigt)',
+  technical_fault: 'STÖRUNG: Zählerabfall über 2 Std ohne Erholung',
+  investigating: 'möglicher Zählerfehler – untersucht',
+  offline: 'Sensor ausgefallen (untersucht)',
+  offline_fault: 'STÖRUNG: Sensor über 2 Std offline',
+  drop_detected: 'Zählerabfall erkannt',
+  transient: 'kurzzeitige Störung (Wert kam zurück)',
+  reset: 'Zähler-Reset (fortgeführt)',
+  stale: 'Wert stand still (Sensor hängt/offline)',
+  unavailable: 'Sensor nicht verfügbar',
+  invalid: 'ungültiger Wert',
+  jitter: 'kleiner Rückwärts-Sprung ignoriert',
+  spike: 'unrealistischer Sprung nach oben',
+  error: 'Lesefehler',
+};
+
+/** CSV-Export (Semikolon, deutsches Excel) der Auffälligkeiten inkl. Bewertung. */
+function anomaliesCsv(anomalies, meta = {}) {
+  const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const dt = (ms) => (ms ? new Date(ms).toLocaleString('de-DE') : '');
+  const out = [];
+  if (meta.anlagenName) out.push(cell('Anlage') + ';' + cell(meta.anlagenName));
+  if (meta.from || meta.to) out.push(cell('Zeitraum') + ';' + cell(`${dt(meta.from)} – ${dt(meta.to)}`));
+  out.push(cell('Exportiert am') + ';' + cell(dt(Date.now())) + (meta.by ? ';' + cell('von') + ';' + cell(meta.by) : ''));
+  out.push('');
+  out.push(['Zeit', 'Zaehler', 'EntityId', 'Typ', 'Beschreibung', 'Bewertung', 'Bewertungstext', 'Bewertet_von', 'Bewertet_am', 'Im_Report_dokumentiert_am'].join(';'));
+  for (const a of anomalies || []) {
+    const r = a.review || {};
+    out.push(
+      [
+        dt(a.at),
+        a.name || '',
+        a.entityId || '',
+        a.type || '',
+        ANOMALY_CSV_TEXT[a.type] || a.type || '',
+        r.classification || 'nicht bewertet',
+        r.note || '',
+        r.reviewedByName || '',
+        r.reviewedAt ? dt(r.reviewedAt) : '',
+        r.reportedAt ? dt(r.reportedAt) : '',
+      ]
+        .map(cell)
+        .join(';')
+    );
+  }
+  return out.join('\r\n');
+}
+
 // Markiert Bewertungen als „im Incident-Report dokumentiert" (mit Zeitstempel des Versands),
 // damit der nächste Report nur noch NEUE (seit dem letzten Versand hinzugekommene) enthält.
 function markReviewsReported(ids, at = Date.now()) {
@@ -100,4 +161,4 @@ function loadProtocol() {
   return readJson(PROTO_FILE, []);
 }
 
-module.exports = { anomalyId, loadReviews, listAnomalies, setReview, attachReviews, markReviewsReported, logIncidentReport, loadProtocol };
+module.exports = { anomalyId, loadReviews, listAnomalies, listAnomaliesInRange, anomaliesCsv, setReview, attachReviews, markReviewsReported, logIncidentReport, loadProtocol };

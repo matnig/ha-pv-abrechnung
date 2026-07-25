@@ -114,3 +114,43 @@ test('pollOnce liest mehrere Akkus in snap._batteries', async () => {
   assert.strictEqual(snap._batteries[0].value, 80);
   assert.strictEqual(snap._batteries[1].value, 55);
 });
+
+test('listAnomaliesInRange filtert nach Zeitbereich, lässt reportedAt unangetastet', () => {
+  process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'pv-range-'));
+  writeJson('snapshots.json', {
+    'sensor.a': { anomalies: [
+      { type: 'stale', at: 1000, entityId: 'sensor.a', name: 'A' },
+      { type: 'offline', at: 5000, entityId: 'sensor.a', name: 'A' },
+      { type: 'reset', at: 9000, entityId: 'sensor.a', name: 'A' },
+    ] },
+  });
+  const inRange = reviews.listAnomaliesInRange(2000, 8000);
+  assert.strictEqual(inRange.length, 1);
+  assert.strictEqual(inRange[0].type, 'offline');
+  // Bereits dokumentierte bleiben im Range-Export enthalten (im Gegensatz zum inkrementellen Versand)
+  reviews.setReview(inRange[0].id, { classification: 'kritisch', user: { name: 'X' } });
+  reviews.markReviewsReported([inRange[0].id], 6000);
+  const again = reviews.listAnomaliesInRange(2000, 8000);
+  assert.strictEqual(again.length, 1, 'dokumentierte Einträge bleiben im Zeitraum-Export');
+  assert.ok(again[0].review.reportedAt, 'Markierung sichtbar');
+  // ... und der inkrementelle Versand sieht sie weiterhin NICHT mehr
+  const neu = reviews.listAnomalies().filter((a) => a.review && !a.review.reportedAt);
+  assert.strictEqual(neu.length, 0);
+});
+
+test('anomaliesCsv: Kopf, Spalten, Bewertung und Excel-taugliches Quoting', () => {
+  const csv = reviews.anomaliesCsv(
+    [
+      { at: 1700000000000, name: 'Zähler "A"', entityId: 'sensor.a', type: 'stale', review: { classification: 'kritisch', note: 'echter; Ausfall', reviewedByName: 'Matteus', reviewedAt: 1700000100000, reportedAt: 1700000200000 } },
+      { at: 1700000300000, name: 'B', entityId: 'sensor.b', type: 'offline', review: null },
+    ],
+    { anlagenName: 'Scharkon', from: 1700000000000, to: 1700001000000, by: 'Matteus' }
+  );
+  assert.ok(csv.includes('"Anlage";"Scharkon"'));
+  assert.ok(csv.includes('Zeitraum'));
+  assert.ok(csv.includes('Zeit;Zaehler;EntityId;Typ'), 'Spaltenkopf vorhanden');
+  assert.ok(csv.includes('"Zähler ""A"""'), 'Anführungszeichen im Namen korrekt verdoppelt');
+  assert.ok(csv.includes('"echter; Ausfall"'), 'Semikolon im Text bleibt in der Zelle');
+  assert.ok(csv.includes('"kritisch"') && csv.includes('"nicht bewertet"'));
+  assert.ok(csv.split('\r\n').length >= 6, 'CRLF-Zeilen');
+});

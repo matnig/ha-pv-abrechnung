@@ -126,6 +126,52 @@ function createServer() {
     }
   });
 
+  // Manueller Incident-Report-Export für einen frei wählbaren Zeitbereich (Datum + Uhrzeit).
+  // Enthält ALLE Auffälligkeiten des Zeitraums und lässt den inkrementellen Versand unberührt
+  // (reportedAt wird hier nie gesetzt).
+  app.get('/api/incident-report/export.csv', (req, res) => {
+    const from = Number(req.query.from);
+    const to = Number(req.query.to);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) {
+      return res.status(400).json({ error: 'Zeitbereich ungültig (from/to als Millisekunden, to > from)' });
+    }
+    const config = loadConfig();
+    const user = haUser(req);
+    const anomalies = reviews.listAnomaliesInRange(from, to);
+    const csv = reviews.anomaliesCsv(anomalies, { anlagenName: config.anlagenName, from, to, by: user.name || user.id || '' });
+    const name = `incident_report_${new Date(from).toISOString().slice(0, 16)}_${new Date(to).toISOString().slice(0, 16)}`.replace(/[:]/g, '-') + '.csv';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    // BOM, damit Excel deutsche Umlaute korrekt liest
+    res.send('\uFEFF' + csv);
+  });
+
+  app.post('/api/incident-report/export', async (req, res) => {
+    try {
+      const { from, to } = req.body || {};
+      const f = Number(from);
+      const t = Number(to);
+      if (!Number.isFinite(f) || !Number.isFinite(t) || t <= f) {
+        return res.status(400).json({ error: 'Zeitbereich ungültig' });
+      }
+      const config = loadConfig();
+      const user = haUser(req);
+      const sentBy = user.name || user.id || 'Unbekannt';
+      const anomalies = reviews.listAnomaliesInRange(f, t);
+      if (!anomalies.length) return res.status(400).json({ error: 'Im gewählten Zeitraum liegen keine Auffälligkeiten.' });
+      const sentAt = Date.now();
+      const fmtDe = (ms) => new Date(ms).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const rangeLabel = `${fmtDe(f)} – ${fmtDe(t)}`;
+      const mail = await sendIncidentReport(config, { anomalies, sentBy, sentAt, rangeLabel, manual: true });
+      const critical = anomalies.filter((a) => a.review && a.review.classification === 'kritisch').length;
+      const recips = (config.alertRecipients && config.alertRecipients.length ? config.alertRecipients : config.recipients) || [];
+      reviews.logIncidentReport({ at: sentAt, by: sentBy, byId: user.id || null, count: anomalies.length, critical, recipients: recips, manual: true, from: f, to: t, rangeLabel });
+      res.json({ ok: true, mail, count: anomalies.length, critical, by: sentBy, rangeLabel });
+    } catch (err) {
+      res.status(500).json({ error: String(err.message || err) });
+    }
+  });
+
   // Daten-Auffälligkeiten (Incident-Review): offene (aktive) und bereits bewertete (Archiv).
   app.get('/api/anomalies', (req, res) => {
     const all = reviews.listAnomalies();

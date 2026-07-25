@@ -81,7 +81,7 @@ function alertContent(alert) {
 
 // Dokumentations-Mail nach dem Absenden eines Incident-Reports: hält fest, WER (HA-Account) WANN
 // die Auffälligkeiten abgesendet hat, samt Bewertung (kritisch/unkritisch, Text, Prüfer).
-async function sendIncidentReport(config, { anomalies, sentBy, sentAt }) {
+async function sendIncidentReport(config, { anomalies, sentBy, sentAt, rangeLabel, manual }) {
   const smtp = config.smtp || {};
   const recipients = ((config.alertRecipients && config.alertRecipients.length ? config.alertRecipients : config.recipients) || []).filter(Boolean);
   if (!recipients.length) throw new Error('Keine (Alarm-)Empfänger konfiguriert');
@@ -106,14 +106,19 @@ async function sendIncidentReport(config, { anomalies, sentBy, sentAt }) {
       </tr>`;
     })
     .join('');
+  const titel = manual ? 'Incident-Report (manueller Export)' : 'Incident-Report';
+  const einleitung = manual
+    ? `Manueller Export durch <b>${esc(sentBy)}</b> am ${when}${rangeLabel ? ` für den Zeitraum <b>${esc(rangeLabel)}</b>` : ''}. ` +
+      `Enthalten sind ALLE Auffälligkeiten des Zeitraums (auch bereits dokumentierte und noch nicht bewertete).`
+    : `Abgesendet von <b>${esc(sentBy)}</b> am ${when}.`;
   const html = `<div style="font-family:system-ui,Arial,sans-serif;color:#222;max-width:820px">
-    <h2>Incident-Report – Dokumentation der Auffälligkeiten${esc(anlage)}</h2>
-    <p>Abgesendet von <b>${esc(sentBy)}</b> am ${when}. ${(anomalies || []).length} Auffälligkeiten, davon <b style="color:#b91c1c">${critical} kritisch</b>.</p>
+    <h2>${titel} – Dokumentation der Auffälligkeiten${esc(anlage)}</h2>
+    <p>${einleitung} ${(anomalies || []).length} Auffälligkeiten, davon <b style="color:#b91c1c">${critical} kritisch</b>.</p>
     <table style="border-collapse:collapse;width:100%;font-size:13px">
       <thead><tr style="background:#f3f4f6;text-align:left"><th style="padding:4px 8px">Zeit</th><th style="padding:4px 8px">Zähler</th><th style="padding:4px 8px">Auffälligkeit</th><th style="padding:4px 8px">Bewertung</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="4" style="padding:8px;color:#888">Keine Auffälligkeiten protokolliert.</td></tr>'}</tbody>
     </table></div>`;
-  const subject = `PV-Abrechnung${anlage} – Incident-Report (${(anomalies || []).length} Auffälligkeiten, ${critical} kritisch)`;
+  const subject = `PV-Abrechnung${anlage} – ${titel}${rangeLabel ? ' ' + rangeLabel : ''} (${(anomalies || []).length} Auffälligkeiten, ${critical} kritisch)`;
   const tx = makeTransport(smtp);
   const info = await tx.sendMail({ from: smtp.from || smtp.user, to: recipients.join(', '), subject, html });
   return { messageId: info.messageId, accepted: info.accepted };

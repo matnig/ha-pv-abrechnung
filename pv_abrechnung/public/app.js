@@ -396,6 +396,7 @@ const ANOMALY_LABEL = {
 };
 
 let archivedAnomalies = [];
+let openAnomalies = [];
 function anomalyBadge(r) {
   return r
     ? r.classification === 'kritisch'
@@ -408,7 +409,9 @@ async function loadAnomalies() {
   try {
     const d = await api('api/anomalies');
     const open = d.open || [];
+    openAnomalies = open;
     archivedAnomalies = d.archived || [];
+    expUpdatePreview();
     // Aktive (noch nicht bewertete) Auffälligkeiten – mit Bewertungs-Buttons.
     $('anomalies').innerHTML = open.length
       ? open
@@ -435,7 +438,7 @@ async function loadAnomalies() {
     const proto = d.protocol || [];
     $('incidentProtocol').innerHTML = proto.length
       ? '<b>Abgesendete Incident-Reports:</b><ul>' + proto
-          .map((p) => `<li>${new Date(p.at).toLocaleString('de-DE')} – von ${esc(p.by)}: ${p.count} Auffälligkeiten (${p.critical} kritisch)</li>`)
+          .map((p) => `<li>${new Date(p.at).toLocaleString('de-DE')} – von ${esc(p.by)}: ${p.count} Auffälligkeiten (${p.critical} kritisch)${p.manual ? ` <span class="tag">manueller Export${p.rangeLabel ? ' · ' + esc(p.rangeLabel) : ''}</span>` : ''}</li>`)
           .join('') + '</ul>'
       : '';
   } catch (e) {
@@ -463,6 +466,76 @@ async function sendIncidentReport() {
     loadAnomalies();
   } catch (e) {
     flash('Incident-Report fehlgeschlagen: ' + e.message, false);
+  }
+}
+
+// ---- Manueller Incident-Report-Export (Zeitraum mit Datum + Uhrzeit) ----
+// datetime-local liefert lokale Zeit ohne Zone – new Date(value) interpretiert sie lokal,
+// genau wie der Nutzer sie meint.
+function expRangeMs() {
+  const f = $('expFrom') && $('expFrom').value ? new Date($('expFrom').value).getTime() : NaN;
+  const t = $('expTo') && $('expTo').value ? new Date($('expTo').value).getTime() : NaN;
+  return Number.isFinite(f) && Number.isFinite(t) && t > f ? { from: f, to: t } : null;
+}
+
+function toLocalInput(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function expPreset(kind) {
+  const now = new Date();
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  let from;
+  let to = now;
+  if (kind === 'today') from = startOfDay(now);
+  else if (kind === 'yesterday') {
+    from = new Date(startOfDay(now).getTime() - 86400000);
+    to = startOfDay(now);
+  } else if (kind === '7d') from = new Date(now.getTime() - 7 * 86400000);
+  else if (kind === 'month') from = new Date(now.getFullYear(), now.getMonth(), 1);
+  else if (kind === 'prevmonth') {
+    from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    to = new Date(now.getFullYear(), now.getMonth(), 1);
+  } else return;
+  $('expFrom').value = toLocalInput(from);
+  $('expTo').value = toLocalInput(to);
+  expUpdatePreview();
+}
+
+function expUpdatePreview() {
+  const el = $('expPreview');
+  if (!el) return;
+  const r = expRangeMs();
+  if (!r) {
+    el.textContent = 'Zeitraum wählen (Von/Bis oder Schnellauswahl).';
+    return;
+  }
+  const all = [...openAnomalies, ...archivedAnomalies].filter((a) => a.at >= r.from && a.at <= r.to);
+  const kritisch = all.filter((a) => a.review && a.review.classification === 'kritisch').length;
+  const unbewertet = all.filter((a) => !a.review).length;
+  el.innerHTML = all.length
+    ? `Im gewählten Zeitraum: <b>${all.length}</b> Auffälligkeiten (${kritisch} kritisch, ${unbewertet} noch nicht bewertet).`
+    : '<span style="color:#b45309">Im gewählten Zeitraum liegen keine Auffälligkeiten.</span>';
+}
+
+function exportIncidentCsv() {
+  const r = expRangeMs();
+  if (!r) return flash('Bitte einen gültigen Zeitraum wählen (Bis muss nach Von liegen).', false);
+  // Relativer Link -> funktioniert auch hinter dem HA-Ingress-Pfad.
+  window.location.href = `api/incident-report/export.csv?from=${r.from}&to=${r.to}`;
+}
+
+async function exportIncidentMail() {
+  const r = expRangeMs();
+  if (!r) return flash('Bitte einen gültigen Zeitraum wählen (Bis muss nach Von liegen).', false);
+  if (!confirm('Incident-Report für den gewählten Zeitraum als Mail versenden? Enthalten sind ALLE Auffälligkeiten des Zeitraums; der normale inkrementelle Versand bleibt unberührt.')) return;
+  try {
+    const res = await api('api/incident-report/export', { method: 'POST', body: JSON.stringify(r) });
+    flash(`Export versendet (${res.rangeLabel}): ${res.count} Auffälligkeiten (${res.critical} kritisch), von ${res.by}.`);
+    loadAnomalies();
+  } catch (e) {
+    flash('Export fehlgeschlagen: ' + e.message, false);
   }
 }
 
