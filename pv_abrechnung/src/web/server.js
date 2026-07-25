@@ -14,7 +14,7 @@ const { verify, sendIncidentReport } = require('../mail/mailer');
 const reviews = require('../review/reviews');
 const { buildOverview } = require('../overview/overview');
 const { readJson } = require('../store/store');
-const { dayPeriod, previousMonth, previousYear, previousDay, monthPeriod, yearPeriod } = require('../billing/periods');
+const { dayPeriod, weekPeriod, previousMonth, previousYear, previousDay, previousWeek, monthPeriod, yearPeriod } = require('../billing/periods');
 
 // Angemeldeter Home-Assistant-Nutzer aus den Ingress-Headern (vom Supervisor gesetzt).
 function haUser(req) {
@@ -29,6 +29,8 @@ function resolvePeriod(body = {}) {
   switch (body.periodType) {
     case 'day':
       return body.date ? dayPeriod(new Date(body.date)) : previousDay(now);
+    case 'week':
+      return body.date ? weekPeriod(new Date(body.date)) : previousWeek(now);
     case 'month':
       return body.year != null && body.month != null ? monthPeriod(Number(body.year), Number(body.month)) : previousMonth(now);
     case 'year':

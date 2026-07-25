@@ -42,6 +42,10 @@
   .ov-role { margin:10px 0 16px; }
   .ov-head { display:flex; justify-content:space-between; align-items:baseline; font-size:13px; gap:8px; flex-wrap:wrap; }
   .ov-axis { display:flex; justify-content:space-between; font-size:9px; color:var(--muted); margin-top:2px; }
+  .ov-row { display:flex; align-items:stretch; gap:4px; margin-top:4px; }
+  .ov-rowlabel { width:46px; flex:0 0 46px; font-size:10px; color:var(--muted); align-self:flex-end; padding-bottom:2px; }
+  .ov-yaxis { width:46px; flex:0 0 46px; height:90px; display:flex; flex-direction:column; justify-content:space-between; align-items:flex-end; font-size:9px; color:var(--muted); line-height:1; }
+  .ov-row .daychart { flex:1; margin:0; }
   .kpi { display:inline-block; background:#f3f4f6; border-radius:6px; padding:6px 10px; margin:3px 6px 3px 0; font-size:13px; }
 </style>
 
@@ -221,9 +225,11 @@
     <div class="hint">Frei ausfüllbarer Text (mehrzeilig), erscheint unten in jeder Bericht-Mail. Bleibt nur bei dir gespeichert (nicht im öffentlichen Code). Antworten auf die Mail gehen automatisch an deine Absenderadresse.</div>
     <div class="grid3" style="margin-top:6px">
       <div><label>tägl. Bericht</label><select id="sDaily"><option value="false">aus</option><option value="true">an</option></select></div>
+      <div><label>wöchentl. Bericht</label><select id="sWeekly"><option value="false">aus</option><option value="true">an</option></select></div>
       <div><label>monatl. Bericht</label><select id="sMonthly"><option value="true">an</option><option value="false">aus</option></select></div>
       <div><label>jährl. Bericht</label><select id="sYearly"><option value="true">an</option><option value="false">aus</option></select></div>
     </div>
+    <div class="hint">Tagesbericht: täglich für den Vortag · Wochenbericht: montags für die Vorwoche · Monatsbericht: am 1. für den Vormonat · Jahresbericht: am 1. Januar für das Vorjahr. Jede Bericht-Mail enthält die Verlaufs-Diagramme (Tag → Stunden, Woche/Monat → Tage, Jahr → Monate) inkl. Vergleich zur Vorperiode.</div>
     <label>Versand-Uhrzeit (Stunde)</label><input id="sHour" type="number" min="0" max="23" style="max-width:100px" />
   </div>
 
@@ -294,6 +300,8 @@
         <select id="pType">
           <option value="prev_month">Vormonat</option>
           <option value="cur_month">Aktueller Monat</option>
+          <option value="prev_week">Vorwoche</option>
+          <option value="cur_week">Aktuelle Woche</option>
           <option value="prev_year">Vorjahr</option>
           <option value="cur_year">Aktuelles Jahr</option>
           <option value="yesterday">Gestern</option>

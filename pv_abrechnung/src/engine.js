@@ -6,6 +6,8 @@ const { sendAlert } = require('./mail/mailer');
 const { computeBilling } = require('./billing/billing');
 const { resolvePeriodReadings } = require('./billing/resolver');
 const ledger = require('./billing/ledger');
+const haClient = require('./ha/haClient');
+const { buildPeriodSeries } = require('./report/periodSeries');
 const { attachReviews } = require('./review/reviews');
 const { monthPeriod } = require('./billing/periods');
 const { buildHtml, buildCsv, subject } = require('./report/report');
@@ -79,6 +81,20 @@ async function runReport(period, opts = {}) {
   // Bewertungen (kritisch/unkritisch, Text, Prüfer) an die Auffälligkeiten anheften – fürs
   // Monatsprotokoll im Bericht. Bei abgeschlossenem Beleg sind sie bereits eingefroren.
   if (!finalized) billing.anomalies = attachReviews(billing.anomalies);
+
+  // Verlaufs-Diagramme (wie in der Übersicht) für jeden Bericht: Tag->Stunden, Woche/Monat->Tage,
+  // Jahr->Monate, jeweils mit Vorperiode als Vergleich. Beim eingefrorenen Beleg wird das
+  // gespeicherte Diagramm verwendet, damit der Beleg unverändert reproduzierbar bleibt.
+  if (finalized) {
+    billing.chart = finalized.chart || null;
+  } else {
+    try {
+      billing.chart = await buildPeriodSeries(config, period, opts.ha || haClient);
+    } catch (err) {
+      console.warn('[report] Diagrammdaten nicht verfügbar:', err.message || err);
+      billing.chart = null;
+    }
+  }
 
   // Beim Versand einer noch nicht abgeschlossenen Periode: Beleg vorbereiten (Prüfsumme steht dann
   // schon in der Mail); nach erfolgreichem Versand wird er ins Journal geschrieben.

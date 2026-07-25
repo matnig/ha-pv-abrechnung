@@ -53,18 +53,39 @@ async function pollOnce(config, opts = {}) {
     }
   };
 
+  // Phase 1: alle Zählerstände einlesen, noch ohne Bewertung. Nötig, damit die
+  // Plausibilitätsprüfung unten weiß, ob ZEITGLEICH ein anderer Zähler hochzählt.
+  const fetched = [];
   for (const meter of config.meters || []) {
     if (!meter.entityId) continue;
     const entry = snap[meter.entityId] || { state: null, daily: {}, anomalies: [], incident: null };
-
-    let st;
     try {
-      st = await getState(meter.entityId);
+      fetched.push({ meter, entry, st: await getState(meter.entityId), error: null });
     } catch (err) {
+      fetched.push({ meter, entry, st: null, error: err });
+    }
+  }
+
+  // Phase 2: Welche Zähler zählen gerade hoch? Ein stillstehender Zähler ist dadurch erklärt
+  // (PV speist ein -> Netzbezug steht still) und darf keinen "stale"-Alarm auslösen.
+  const activeIds = new Set();
+  for (const f of fetched) {
+    if (!f.st) continue;
+    const n = Number(String(f.st.state).replace(',', '.'));
+    if (!Number.isFinite(n)) continue;
+    const rawKwh = n * haClient.unitFactorToKwh((f.st.attributes && f.st.attributes.unit_of_measurement) || '');
+    const prevRaw = f.entry.state ? f.entry.state.lastRaw : null;
+    if (prevRaw != null && rawKwh > prevRaw + 1e-9) activeIds.add(f.meter.entityId);
+  }
+
+  // Phase 3: bewerten.
+  for (const f of fetched) {
+    const { meter, entry, st } = f;
+    if (!st) {
       // HA nicht erreichbar (z.B. transienter 502 direkt nach Add-on-Neustart) -> KEINE
       // "unavailable"-Markierung und NICHT in die Auffälligkeiten schreiben (transient/erwartet):
       // letzten Stand behalten, Zähler überspringen, nur ins Log.
-      console.warn(`[poll] ${meter.entityId} übersprungen (HA nicht erreichbar): ${err.message || err}`);
+      console.warn(`[poll] ${meter.entityId} übersprungen (HA nicht erreichbar): ${f.error && (f.error.message || f.error)}`);
       entry.outages = (entry.outages || []).concat(now).slice(-1000); // Ausfall (HA nicht erreichbar)
       trackOffline(entry, meter, true);
       snap[meter.entityId] = entry;
@@ -83,7 +104,17 @@ async function pollOnce(config, opts = {}) {
     const n = Number(String(st.state).replace(',', '.'));
     const rawKwh = available && Number.isFinite(n) ? n * factor : st.state;
     const lu = st.last_updated ? Date.parse(st.last_updated) : st.last_changed ? Date.parse(st.last_changed) : NaN;
-    const reading = { raw: rawKwh, available, now, lastUpdated: Number.isFinite(lu) ? lu : null };
+    // `last_reported` (HA >= 2024.8) wird bei jedem Melden gesetzt, auch wenn der Wert gleich
+    // bleibt -> damit unterscheidet sich "Sensor lebt, Zähler steht still" von "Sensor tot".
+    const lr = st.last_reported ? Date.parse(st.last_reported) : NaN;
+    const reading = {
+      raw: rawKwh,
+      available,
+      now,
+      lastUpdated: Number.isFinite(lu) ? lu : null,
+      lastReported: Number.isFinite(lr) ? lr : null,
+      peersActive: [...activeIds].some((id) => id !== meter.entityId),
+    };
 
     const out = processReading(entry.state, reading, mc);
     entry.state = out.state;

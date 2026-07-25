@@ -3,12 +3,13 @@
 const cron = require('node-cron');
 const { loadConfig } = require('../config');
 const { runReport } = require('../engine');
-const { previousDay, previousMonth, previousYear } = require('../billing/periods');
+const { previousDay, previousWeek, previousMonth, previousYear } = require('../billing/periods');
 
 let task = null;
 
 // Ein täglicher Lauf zur konfigurierten Stunde entscheidet, welche Berichte fällig sind:
 //  - Tagesbericht: jeden Tag (für gestern)
+//  - Wochenbericht: montags (für die Vorwoche)
 //  - Monatsbericht: am 1. des Monats (für den Vormonat)
 //  - Jahresbericht: am 1. Januar (für das Vorjahr)
 async function tick(now = new Date()) {
@@ -17,6 +18,7 @@ async function tick(now = new Date()) {
   const jobs = [];
 
   if (sched.daily) jobs.push(previousDay(now));
+  if (sched.weekly && now.getDay() === 1) jobs.push(previousWeek(now));
   if (sched.monthly && now.getDate() === 1) jobs.push(previousMonth(now));
   if (sched.yearly && now.getMonth() === 0 && now.getDate() === 1) jobs.push(previousYear(now));
 

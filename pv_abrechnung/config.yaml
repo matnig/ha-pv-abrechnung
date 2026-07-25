@@ -1,8 +1,8 @@
 # Home-Assistant-Add-on-Manifest
 name: PV Abrechnung
-version: "0.2.1"
+version: "0.3.0"
 slug: pv_abrechnung
-description: Zählerbasierte PV-Abrechnung (Anfangs-/Endstand) mit Tages-/Monats-/Jahresbericht per Mail
+description: Zählerbasierte PV-Abrechnung (Anfangs-/Endstand) mit Tages-/Wochen-/Monats-/Jahresbericht per Mail
 url: "https://github.com/matnig/ha-pv-abrechnung"
 arch:
   - amd64

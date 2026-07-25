@@ -1,6 +1,7 @@
 'use strict';
 
 const { fmt } = require('../billing/periods');
+const { buildReportCharts } = require('./charts');
 
 const eur = (n) => (n == null ? '–' : n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }));
 const kwh = (n) => (n == null ? '–' : `${n.toLocaleString('de-DE', { maximumFractionDigits: 2 })} kWh`);
@@ -26,7 +27,7 @@ const ANOMALY_TEXT = {
 
 function subject(billing) {
   const p = billing.period;
-  const label = { day: 'Tagesbericht', month: 'Monatsbericht', year: 'Jahresbericht' }[p.type] || 'Bericht';
+  const label = { day: 'Tagesbericht', week: 'Wochenbericht', month: 'Monatsbericht', year: 'Jahresbericht' }[p.type] || 'Bericht';
   const incomplete = p.end.getTime() > (billing.generatedAt || Date.now());
   const anlage = billing.stammdaten && billing.stammdaten.anlagenName ? ' ' + billing.stammdaten.anlagenName : '';
   return `PV-Abrechnung${anlage} – ${label} ${p.label}${incomplete ? ' (nicht abgeschlossen)' : ''}`;
@@ -93,10 +94,12 @@ function buildInfoStats(billing) {
     parts.push(`
       <div style="margin-top:8px">
         <div style="font-size:14px">Autarkiegrad: <b>${pv}%</b> des Verbrauchs kam aus der PV-Anlage.</div>
-        <div style="display:flex;height:22px;border-radius:4px;overflow:hidden;margin-top:6px;font-size:11px;color:#fff">
-          <div style="background:#16a34a;width:${pv}%;text-align:center;line-height:22px">${pv > 12 ? 'PV ' + pv + '%' : ''}</div>
-          <div style="background:#9ca3af;width:${netz}%;text-align:center;line-height:22px">${netz > 12 ? 'Netz ' + netz + '%' : ''}</div>
-        </div>
+        <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;margin-top:6px;font-size:11px;color:#fff;table-layout:fixed">
+          <tr>
+            <td width="${pv}%" height="22" align="center" style="background:#16a34a;line-height:22px">${pv > 12 ? 'PV ' + pv + '%' : ''}</td>
+            <td width="${netz}%" height="22" align="center" style="background:#9ca3af;line-height:22px">${netz > 12 ? 'Netz ' + netz + '%' : ''}</td>
+          </tr>
+        </table>
         <div style="font-size:12px;color:#555;margin-top:4px">Aus PV: ${kwh(t.pvKwh)} · Aus Netz: ${kwh(t.netzKwh)} · Gesamt: ${kwh(t.gesamtKwh)}</div>
       </div>`);
   }
@@ -136,8 +139,8 @@ function buildHtml(billing) {
   const t = billing.totals;
   const sd = billing.stammdaten || {};
   const incomplete = p.end.getTime() > (billing.generatedAt || Date.now());
-  const periodWord = { day: 'Tag', month: 'Monat', year: 'Jahr' }[p.type] || 'Zeitraum';
-  const periodArticle = { day: 'der', month: 'der', year: 'das' }[p.type] || 'der';
+  const periodWord = { day: 'Tag', week: 'Woche', month: 'Monat', year: 'Jahr' }[p.type] || 'Zeitraum';
+  const periodArticle = { day: 'der', week: 'die', month: 'der', year: 'das' }[p.type] || 'der';
   const incompleteBanner = incomplete
     ? `<div style="background:#fee2e2;border:2px solid #dc2626;border-radius:8px;padding:12px;margin:12px 0;text-align:center">
          <div style="color:#dc2626;font-size:22px;font-weight:800">⚠ ${periodWord} nicht abgeschlossen</div>
@@ -235,6 +238,7 @@ function buildHtml(billing) {
       )}</b></td></tr>
     </table>
     ${buildMeterChart(billing)}
+    ${buildReportCharts(billing.chart)}
     ${buildInfoStats(billing)}
     ${buildPriceTransparency(billing)}
     ${monthlyHtml}

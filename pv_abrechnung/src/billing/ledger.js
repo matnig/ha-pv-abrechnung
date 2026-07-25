@@ -36,6 +36,7 @@ function contentOf(e) {
     battery: e.battery || undefined, // Alt-Belege (Einzel-Akkuwert): weiter hashen, sonst brechen sie
     batteries: e.batteries || undefined,
     anomalies: e.anomalies || undefined,
+    chart: e.chart || undefined,
     prevHash: e.prevHash,
   });
 }
@@ -78,6 +79,7 @@ function buildEntry(billing, config, meta = {}) {
     monthly: billing.monthly || null,
     stammdaten: billing.stammdaten && (billing.stammdaten.anlagenName || billing.stammdaten.betreiber || billing.stammdaten.kunde) ? billing.stammdaten : undefined,
     batteries: billing.batteries && billing.batteries.length ? billing.batteries.map((b) => ({ name: b.name, entityId: b.entityId })) : undefined,
+    chart: billing.chart || undefined,
     anomalies: billing.anomalies && billing.anomalies.length
       ? billing.anomalies.map((a) => ({ type: a.type, at: a.at, entityId: a.entityId, name: a.name, from: a.from, oldFinal: a.oldFinal, newStart: a.newStart, review: a.review || null }))
       : undefined,

@@ -35,7 +35,7 @@ const DEFAULT_CONFIG = {
   alertRecipients: [], // Empfänger der Störungs-/Untersuchungsmails (leer -> wie recipients)
   reportFooter: '', // frei ausfüllbare Fußzeile/Impressum unter jedem Bericht (bleibt in /data, nicht im Repo)
   smtp: { host: '', port: 587, secure: false, user: '', pass: '', from: '' },
-  schedule: { daily: false, monthly: true, yearly: true, hour: 6 },
+  schedule: { daily: false, weekly: false, monthly: true, yearly: true, hour: 6 },
   meterCfg: {
     resetToleranceKwh: 1,
     recoverToleranceKwh: 1,

@@ -32,7 +32,7 @@ function num(v) {
 }
 
 function freshState() {
-  return { offset: 0, lastRaw: null, lastRawTs: null, lastChangeTs: null, effective: null, pending: null };
+  return { offset: 0, lastRaw: null, lastRawTs: null, lastChangeTs: null, effective: null, pending: null, staleReportedFor: null };
 }
 
 function heldEffective(s) {
@@ -93,10 +93,26 @@ function processReading(prev, reading, cfg = {}) {
     return done(s, s.offset + raw, true, anomalies);
   }
 
-  // "Hängt/offline" NUR anhand von HA `last_updated` (Gerät meldet nichts mehr) – NICHT anhand
-  // eines gleichbleibenden Werts. Ein flacher Energiezähler ist normal (nachts / Akku deckt Last).
-  if (reading.lastUpdated != null && now - reading.lastUpdated >= c.staleMinutes * 60000) {
-    anomalies.push({ type: 'stale', at: now, sinceUpdate: reading.lastUpdated, minutes: Math.round((now - reading.lastUpdated) / 60000) });
+  // "Hängt/offline" NIE anhand eines gleichbleibenden Werts: ein flacher Energiezähler ist normal
+  // (nachts, Akku deckt die Last, oder PV speist ein -> Netzbezug steht still).
+  //
+  // Maßgeblich ist `last_reported` (HA >= 2024.8): das wird bei JEDEM Melden des Sensors neu
+  // gesetzt, auch wenn der Wert identisch bleibt -> lebt der Sensor, gibt es kein "stale".
+  // `last_updated` allein wäre falsch, denn HA setzt es nur bei WERTänderung – ein stillstehender
+  // Zähler sähe damit immer nach Ausfall aus (Ursache der Fehlalarme beim Netzbezug).
+  // Zusätzliche Plausibilität: zählt zeitgleich ein anderer Zähler hoch (peersActive, z.B.
+  // Einspeisung/Erzeugung), ist ein stillstehender Netzbezug erklärt -> kein Alarm.
+  const lastSignal = reading.lastReported != null ? reading.lastReported : reading.lastUpdated;
+  const isStale =
+    lastSignal != null && now - lastSignal >= c.staleMinutes * 60000 && reading.peersActive !== true;
+  if (isStale) {
+    // Pro Hänge-Phase nur EINMAL melden (sonst bei jedem Poll ein neuer Eintrag).
+    if (s.staleReportedFor !== lastSignal) {
+      s.staleReportedFor = lastSignal;
+      anomalies.push({ type: 'stale', at: now, sinceUpdate: lastSignal, minutes: Math.round((now - lastSignal) / 60000) });
+    }
+  } else if (s.staleReportedFor != null) {
+    s.staleReportedFor = null; // Sensor meldet wieder -> Phase beendet
   }
 
   if (s.pending) {

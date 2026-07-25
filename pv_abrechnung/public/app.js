@@ -207,7 +207,7 @@ function fillForm() {
   $('anlagenName').value = config.anlagenName || '';
   $('betreiber').value = config.betreiber || '';
   $('kunde').value = config.kunde || '';
-  $('sDaily').value = String(!!s.daily); $('sMonthly').value = String(!!s.monthly);
+  $('sDaily').value = String(!!s.daily); $('sWeekly').value = String(!!s.weekly); $('sMonthly').value = String(!!s.monthly);
   $('sYearly').value = String(!!s.yearly); $('sHour').value = s.hour;
   $('smtpHost').value = sm.host; $('smtpPort').value = sm.port; $('smtpSecure').value = String(!!sm.secure);
   $('smtpUser').value = sm.user; $('smtpPass').value = sm.pass; $('smtpFrom').value = sm.from;
@@ -234,7 +234,8 @@ function collectForm() {
   config.betreiber = $('betreiber').value;
   config.kunde = $('kunde').value;
   config.schedule = {
-    daily: $('sDaily').value === 'true', monthly: $('sMonthly').value === 'true',
+    daily: $('sDaily').value === 'true', weekly: $('sWeekly').value === 'true',
+    monthly: $('sMonthly').value === 'true',
     yearly: $('sYearly').value === 'true', hour: +$('sHour').value,
   };
   config.smtp = {
@@ -513,6 +514,10 @@ function periodBody() {
   switch ($('pType').value) {
     case 'cur_month':
       return { ...base, periodType: 'month', year: now.getFullYear(), month: now.getMonth() };
+    case 'prev_week':
+      return { ...base, periodType: 'week' };
+    case 'cur_week':
+      return { ...base, periodType: 'week', date: now.toISOString().slice(0, 10) };
     case 'prev_year':
       return { ...base, periodType: 'year' };
     case 'cur_year':
@@ -636,13 +641,38 @@ const ROLE_META = {
   einspeisung: { label: 'Einspeisung', color: '#0d9488' },
 };
 
-function hourBars(arr, max, color, faded) {
-  return '<div class="daychart">' + (arr || [])
-    .map((v, h) => {
+// Energie in der zur Größe passenden Einheit (Wh unter 1 kWh, MWh ab 1000 kWh).
+function fmtEnergy(kwh, digits) {
+  const v = Number(kwh);
+  if (!Number.isFinite(v)) return '–';
+  const abs = Math.abs(v);
+  if (abs < 0.0005) return '0 kWh';
+  if (abs < 1) return (v * 1000).toLocaleString('de-DE', { maximumFractionDigits: digits ?? 0 }) + ' Wh';
+  if (abs >= 1000) return (v / 1000).toLocaleString('de-DE', { maximumFractionDigits: digits ?? 2 }) + ' MWh';
+  return v.toLocaleString('de-DE', { maximumFractionDigits: digits ?? 2 }) + ' kWh';
+}
+
+// „Schöner" Achsenendwert (1/2/5-Schritte) für eine lesbare Skalierung.
+function niceMax(x) {
+  const v = Math.abs(Number(x) || 0);
+  if (v <= 0) return 1;
+  const pow = Math.pow(10, Math.floor(Math.log10(v)));
+  const f = v / pow;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * pow;
+}
+
+// Eine Balkenreihe mit beschrifteter Y-Achse (Skalierung). Tooltip je Balken zeigt den Wert
+// in der passenden Einheit (Wh/kWh/MWh).
+function hourBars(arr, max, color, faded, rowLabel, tipLabels) {
+  const bars = (arr || [])
+    .map((v, i) => {
       const ht = Math.round((v / (max || 1)) * 88);
-      return `<div class="b" style="height:${Math.max(1, ht)}px;background:${color};opacity:${faded ? 0.35 : 0.9}" title="${h}:00 – ${v.toLocaleString('de-DE', { maximumFractionDigits: 2 })} kWh"></div>`;
+      const when = tipLabels ? tipLabels[i] : `${i}:00`;
+      return `<div class="b" style="height:${Math.max(1, ht)}px;background:${color};opacity:${faded ? 0.35 : 0.9}" title="${esc(when)} – ${esc(fmtEnergy(v))}"></div>`;
     })
-    .join('') + '</div>';
+    .join('');
+  const axis = `<div class="ov-yaxis"><span>${esc(fmtEnergy(max, 1))}</span><span>${esc(fmtEnergy(max / 2, 1))}</span><span>0</span></div>`;
+  return `<div class="ov-row"><div class="ov-rowlabel">${esc(rowLabel || '')}</div>${axis}<div class="daychart">${bars}</div></div>`;
 }
 
 function renderDayChart(o) {
@@ -659,13 +689,14 @@ function renderDayChart(o) {
     .map((role) => {
       const s = o.series[role] || {};
       const m = ROLE_META[role] || { label: role, color: '#6b7280' };
-      const max = Math.max(0.001, ...(s.today || []), ...(s.yesterday || []));
+      const max = niceMax(Math.max(0.001, ...(s.today || []), ...(s.yesterday || [])));
+      const tips = Array.from({ length: 24 }, (_, h) => `${h}:00–${h + 1}:00`);
       return `<div class="ov-role">
         <div class="ov-head"><b style="color:${m.color}">${m.label}</b>
-          <span>heute <b>${(s.todaySum || 0).toLocaleString('de-DE', { maximumFractionDigits: 2 })} kWh</b> · gestern ${(s.ydaySum || 0).toLocaleString('de-DE', { maximumFractionDigits: 2 })} kWh</span></div>
-        ${hourBars(s.today, max, m.color, false)}
-        ${hourBars(s.yesterday, max, m.color, true)}
-        <div class="ov-axis"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span></div>
+          <span>heute <b>${esc(fmtEnergy(s.todaySum || 0))}</b> · gestern ${esc(fmtEnergy(s.ydaySum || 0))}</span></div>
+        ${hourBars(s.today, max, m.color, false, 'heute', tips)}
+        ${hourBars(s.yesterday, max, m.color, true, 'gestern', tips)}
+        <div class="ov-axis" style="margin-left:96px"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span></div>
       </div>`;
     })
     .join('');
