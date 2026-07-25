@@ -27,6 +27,19 @@ function axisUnit(maxKwh) {
   return { unit: 'kWh', div: 1 };
 }
 
+// Hellere Variante einer Farbe (mit Weiß gemischt). Wird für die Vorperiode-Balken genutzt –
+// `opacity` unterstützen Mail-Clients wie Outlook nicht, eine echte Farbe schon.
+function fade(hex, amount = 0.62) {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(String(hex));
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const mix = (c) => Math.round(c + (255 - c) * amount);
+  const r = mix((n >> 16) & 255);
+  const g = mix((n >> 8) & 255);
+  const b = mix(n & 255);
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
 // „Schöner" Achsenendwert (1/2/5-Schritte), damit die Skalierung lesbare Stufen hat.
 function niceMax(v) {
   const x = Math.abs(Number(v) || 0);
@@ -70,22 +83,25 @@ function barChartHtml(o = {}) {
        </table>
      </td>`;
 
+  // Ein Balken = leeres <div> mit fester Pixelhöhe in einer unten ausgerichteten Zelle.
+  // Bewusst KEINE height-Attribute auf verschachtelten <td>: leere Zellen werden von
+  // Mail-Clients auf 0 kollabiert – die Balken wären dann unsichtbar.
+  const bar = (val, faded) => {
+    const px = Math.max(1, Math.round((Math.abs(val || 0) / max) * h));
+    const bg = faded ? fade(color) : color;
+    return `<div style="height:${px}px;background:${bg};font-size:0;line-height:0">&nbsp;</div>`;
+  };
+
   const barCell = (v, i) => {
-    const cells = [];
-    const bar = (val, faded) => {
-      const px = Math.max(1, Math.round((Math.abs(val || 0) / max) * h));
-      return `<table cellpadding="0" cellspacing="0" border="0" align="left" style="border-collapse:collapse;height:${h}px">
-                <tr><td height="${h - px}" style="line-height:1;font-size:0">&nbsp;</td></tr>
-                <tr><td height="${px}" style="background:${color};opacity:${faded ? 0.35 : 1};line-height:1;font-size:0">&nbsp;</td></tr>
-              </table>`;
-    };
-    if (prev) {
-      cells.push(`<td width="48%" valign="bottom" style="padding:0 1px">${bar(v, false)}</td>`);
-      cells.push(`<td width="48%" valign="bottom" style="padding:0 1px">${bar(prev[i], true)}</td>`);
-    } else {
-      cells.push(`<td valign="bottom" style="padding:0 1px">${bar(v, false)}</td>`);
+    if (!prev) {
+      return `<td valign="bottom" height="${h}" style="padding:0 1px;vertical-align:bottom">${bar(v, false)}</td>`;
     }
-    return `<td valign="bottom" style="padding:0"><table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%"><tr>${cells.join('')}</tr></table></td>`;
+    return `<td valign="bottom" height="${h}" style="padding:0 1px;vertical-align:bottom">
+        <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;table-layout:fixed"><tr>
+          <td valign="bottom" style="vertical-align:bottom;padding:0 1px 0 0">${bar(v, false)}</td>
+          <td valign="bottom" style="vertical-align:bottom;padding:0 0 0 1px">${bar(prev[i], true)}</td>
+        </tr></table>
+      </td>`;
   };
 
   const bars = cur.map(barCell).join('');
@@ -148,4 +164,4 @@ function buildReportCharts(chart) {
     ${blocks}`;
 }
 
-module.exports = { fmtEnergy, axisUnit, niceMax, barChartHtml, buildReportCharts, ROLE_META };
+module.exports = { fmtEnergy, axisUnit, niceMax, fade, barChartHtml, buildReportCharts, ROLE_META };

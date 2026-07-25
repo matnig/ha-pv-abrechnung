@@ -156,15 +156,15 @@ function buildHtml(billing) {
         : '';
       const src = l.source === 'statistics' ? 'HA-Statistik' : l.source === 'poll' ? 'Polling' : l.source === 'virtual' ? 'virtuell' : '–';
       return `<tr>
-        <td>${esc(l.name)}<div style="color:#888;font-size:11px">${esc(l.entityId)} · Quelle: ${src}</div>${
+        <td>${esc(l.name)}<div style="color:#888;font-size:10px;word-break:break-all">${esc(l.entityId)} · Quelle: ${src}</div>${
           l.hinweis ? `<div style="color:#2563eb;font-size:11px">${esc(l.hinweis)}</div>` : ''
         }${warn}</td>
         <td>${esc(l.roleLabel)}</td>
         <td style="text-align:right">${kwh(l.anfang)}</td>
         <td style="text-align:right">${kwh(l.ende)}</td>
         <td style="text-align:right"><b>${kwh(l.kwh)}</b></td>
-        <td style="text-align:right">${l.tariff ? l.tariff.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' €/kWh' : '–'}</td>
-        <td style="text-align:right">${l.tariff || l.amount ? eur(l.amount) : '–'}</td>
+        <td style="text-align:right">${l.tariff ? l.tariff.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + '&nbsp;€/kWh' : '–'}</td>
+        <td style="text-align:right;white-space:nowrap"><b>${l.tariff || l.amount ? eur(l.amount) : '–'}</b></td>
       </tr>`;
     })
     .join('');
@@ -222,7 +222,11 @@ function buildHtml(billing) {
            </tr></table>`
         : ''
     }
-    <table style="border-collapse:collapse;width:100%;margin-top:16px;font-size:14px">
+    <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;margin-top:16px;font-size:13px;table-layout:fixed">
+      <colgroup>
+        <col style="width:25%" /><col style="width:12%" /><col style="width:12%" /><col style="width:12%" />
+        <col style="width:12%" /><col style="width:14%" /><col style="width:13%" />
+      </colgroup>
       <thead><tr style="background:#f3f4f6;text-align:left">
         <th style="padding:6px">Zähler</th><th>Rolle</th>
         <th style="text-align:right">Anfangsstand</th><th style="text-align:right">Endstand</th>

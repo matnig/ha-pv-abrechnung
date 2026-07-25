@@ -23,18 +23,34 @@ const dayStart = (ms) => {
   return d.getTime();
 };
 
-/** Monotone Zuwächse (kWh) aus aufeinanderfolgenden Statistik-Buckets. */
+/**
+ * Monotone Zuwächse (kWh) aus aufeinanderfolgenden Statistik-Buckets.
+ *
+ * WICHTIG: Bei einem Rücksprung (Tasmota sendet nach einem Update kurz 0, Zähler-Reset o.ä.)
+ * wird der bisherige Stand GEHALTEN und nicht auf den Glitch-Wert gesenkt. Sonst zählt der
+ * Rücksprung auf 0 beim nächsten echten Wert als riesiger Zuwachs (z.B. 37 MWh statt 20 kWh)
+ * und ein einziger Ausreißer macht die gesamte Kurve unsichtbar. Gleiche Regel wie in
+ * ha/statistics.js (dailyCumKwh).
+ */
 function bucketDeltas(rows, factor) {
   const pts = (rows || [])
     .map((r) => ({ ms: bucketStartMs(r), val: r.state != null ? Number(r.state) : r.sum != null ? Number(r.sum) : null }))
     .filter((p) => p.val != null && Number.isFinite(p.val) && Number.isFinite(p.ms))
     .sort((a, b) => a.ms - b.ms);
   const out = [];
-  let prev = null;
+  let running = null; // höchster bisher gesehener Stand (monoton)
   for (const p of pts) {
     const v = p.val * factor;
-    if (prev != null) out.push({ ms: p.ms, delta: v > prev ? v - prev : 0 });
-    prev = v;
+    if (running == null) {
+      running = v;
+      continue;
+    }
+    if (v > running) {
+      out.push({ ms: p.ms, delta: v - running });
+      running = v; // echter Anstieg -> übernehmen
+    } else {
+      out.push({ ms: p.ms, delta: 0 }); // Rückwärts-Glitch -> Stand halten
+    }
   }
   return out;
 }

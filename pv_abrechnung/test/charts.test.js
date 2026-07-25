@@ -3,8 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { fmtEnergy, axisUnit, niceMax, barChartHtml, buildReportCharts } = require('../src/report/charts');
-const { buildPeriodSeries, bucketing } = require('../src/report/periodSeries');
+const { fmtEnergy, axisUnit, niceMax, fade, barChartHtml, buildReportCharts } = require('../src/report/charts');
+const { buildPeriodSeries, bucketing, bucketDeltas } = require('../src/report/periodSeries');
 const { weekPeriod, previousWeek, isoWeek, dayPeriod, monthPeriod, yearPeriod } = require('../src/billing/periods');
 
 test('fmtEnergy wählt Wh / kWh / MWh je nach Größe', () => {
@@ -28,7 +28,46 @@ test('barChartHtml: mail-tauglich (Tabellen, kein SVG/Flex) und mit Achsenbeschr
   assert.ok(html.includes('<table'), 'nutzt Tabellen');
   assert.ok(!/<svg|display:\s*flex/i.test(html), 'kein SVG/Flexbox (Outlook-tauglich)');
   assert.ok(html.includes('kWh'), 'Achseneinheit beschriftet');
-  assert.ok(html.includes('opacity:0.35'), 'Vorperiode als blasser Balken');
+  assert.ok(!/opacity/i.test(html), 'kein opacity (von Outlook ignoriert) – stattdessen hellere Farbe');
+  assert.ok(html.includes(fade('#16a34a')), 'Vorperiode als hellere Farbe');
+});
+
+test('barChartHtml: Balken haben echte Pixelhöhen (Mail-Clients kollabieren leere Zellen)', () => {
+  const html = barChartHtml({ labels: ['a', 'b'], current: [10, 5], color: '#2563eb', height: 100 });
+  const heights = [...html.matchAll(/height:(\d+)px;background/g)].map((m) => Number(m[1]));
+  assert.deepStrictEqual(heights, [100, 50], 'Balkenhöhe proportional zum Wert');
+  assert.ok(!/<td[^>]*height="0"/.test(html), 'keine Null-Höhen-Zellen');
+});
+
+test('bucketDeltas: 0-Glitch (Tasmota-Reset) erzeugt KEINEN Riesen-Zuwachs', () => {
+  // Zählerstand ~37.000 kWh, dazwischen ein Rücksprung auf 0 (Tasmota nach Update)
+  const rows = [
+    { start: 0, state: 37000 },
+    { start: 3600000, state: 37020 }, // +20
+    { start: 7200000, state: 0 }, // Glitch -> 0, kein Zuwachs
+    { start: 10800000, state: 37040 }, // zurück: darf nur +20 sein, NICHT +37040
+    { start: 14400000, state: 37060 }, // +20
+  ];
+  const deltas = bucketDeltas(rows, 1).map((d) => d.delta);
+  assert.deepStrictEqual(deltas, [20, 0, 20, 20]);
+  assert.ok(Math.max(...deltas) < 100, 'kein Ausreißer, der die Achse zerstört');
+});
+
+test('Chart-Summe stimmt mit der Abrechnungsmenge überein (auch mit Glitches)', async () => {
+  const period = monthPeriod(2026, 6);
+  const t0 = period.start.getTime();
+  // 10 Tage je +20 kWh = 200 kWh, mit einem 0-Glitch dazwischen
+  const rows = [];
+  let cum = 36800;
+  for (let d = 0; d < 11; d++) {
+    rows.push({ start: t0 + d * 86400000, state: d === 5 ? 0 : cum });
+    if (d !== 5) cum += 20;
+  }
+  const ha = { statisticsDuringPeriod: async () => ({ 'sensor.grid': rows }) };
+  const cfg = { meters: [{ id: 'm', name: 'Netzbezug', entityId: 'sensor.grid', role: 'netzbezug', unit: 'kWh' }] };
+  const c = await buildPeriodSeries(cfg, period, ha);
+  assert.ok(c.series.netzbezug.sum < 300, `Summe muss ~200 kWh sein, war ${c.series.netzbezug.sum}`);
+  assert.ok(Math.max(...c.series.netzbezug.values) < 100, 'kein Tages-Ausreißer');
 });
 
 test('buildReportCharts rendert je Rolle einen Block mit Summen', () => {
