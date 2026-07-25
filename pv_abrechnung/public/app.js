@@ -738,6 +738,10 @@ function fillAssessForm() {
   if ($('asKwp')) $('asKwp').value = p.kwp ?? '';
   if ($('asBat')) $('asBat').value = p.batteryKwh ?? '';
   if ($('asFrei')) $('asFrei').value = p.freieFlaecheKwp ?? '';
+  if ($('asInbetriebnahme')) $('asInbetriebnahme').value = p.inbetriebnahme ?? '';
+  if ($('asWr')) $('asWr').value = p.wechselrichterKw ?? '';
+  if ($('asWp')) $('asWp').checked = !!p.waermepumpe;
+  if ($('asWallbox')) $('asWallbox').checked = !!p.wallbox;
   if ($('asNeigung')) $('asNeigung').value = p.neigung ?? 35;
   if ($('asAusrichtung')) $('asAusrichtung').value = p.ausrichtung || 'sued';
   if ($('asZins')) $('asZins').value = a.kalkulationszins ?? 3;
@@ -754,6 +758,10 @@ async function runAssess() {
   config.plant = {
     ...(config.plant || {}),
     kwp: numOrNull('asKwp'), batteryKwh: numOrNull('asBat'), freieFlaecheKwp: numOrNull('asFrei'),
+    inbetriebnahme: ($('asInbetriebnahme').value || '').trim() || null,
+    wechselrichterKw: numOrNull('asWr'),
+    waermepumpe: $('asWp').checked,
+    wallbox: $('asWallbox').checked,
     neigung: numOrNull('asNeigung') ?? 35, ausrichtung: $('asAusrichtung').value,
   };
   config.assess = {
@@ -814,6 +822,13 @@ function renderAssess(r) {
       <span class="kpi">Eigenverbrauchsquote: <b>${ist.quoten.eigenverbrauchsquote ?? '–'}%</b></span>
       <span class="kpi">Autarkie des Kunden: <b>${ist.quoten.autarkie ?? '–'}%</b></span>
     </div>
+    ${p.anlage ? `<div style="margin-top:4px">
+      <span class="kpi">Inbetriebnahme ${esc(p.anlage.inbetriebnahme)} (${p.anlage.alterJahre} Jahre alt)</span>
+      <span class="kpi" style="color:${p.anlage.eegRestJahre <= 3 ? '#b91c1c' : p.anlage.eegRestJahre <= 5 ? '#b45309' : '#166534'}">EEG-Vergütung bis Ende ${p.anlage.eegVerguetungBis} (${p.anlage.eegRestJahre} Jahre)</span>
+      ${p.anlage.erwarteteDegradationProzent != null ? `<span class="kpi">altersübliche Degradation ≈ ${p.anlage.erwarteteDegradationProzent}%</span>` : ''}
+    </div>` : ''}
+    ${p.wechselrichterKw ? `<div class="mini" style="margin-top:2px">Wechselrichter: ${p.wechselrichterKw} kW (Zubau wird an dieser Grenze gedeckelt)</div>` : ''}
+    ${(p.flexLasten || []).length ? `<div class="mini" style="margin-top:2px">Verschiebbare Lasten: ${p.flexLasten.map(esc).join(', ')}</div>` : ''}
     <div class="mini" style="margin-top:4px">${src(p.kwp)} ${src(p.batteryKwh)}</div>
     <table style="margin-top:10px"><tbody>
       <tr><td>Erzeugung</td><td class="num"><b>${esc(fmtEnergy(ist.jahr.erzeugung))}</b>/Jahr</td></tr>

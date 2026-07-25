@@ -223,3 +223,52 @@ test('Preis-Sensitivität nennt die tatsächlich günstigste Variante', async ()
   const guenstigste = Math.min(...r.variants.map((v) => v.invest));
   assert.ok(h.text.includes(String(Math.round(guenstigste))), `Text muss ${guenstigste} nennen: ${h.text}`);
 });
+
+test('freie Dachfläche begrenzt die PV-Varianten und ergänzt die Maximalbelegung', async () => {
+  const cfg = { ...config, plant: { freieFlaecheKwp: 7 } };
+  const r = await runAssessment(cfg, buildHa(), { pvgisFetch });
+  const pv = r.variants.filter((v) => v.art === 'pv');
+  assert.ok(pv.length, 'PV-Varianten vorhanden');
+  assert.ok(pv.every((v) => v.addKwp <= 7), `alle <= 7 kWp: ${pv.map((v) => v.addKwp)}`);
+  assert.ok(pv.some((v) => v.addKwp === 7 && /maximale Dachbelegung/.test(v.label)), 'Maximalbelegung als Variante');
+});
+
+test('Wechselrichter-Grenze deckelt den Zubau-Ertrag und erzeugt eine Warnung', async () => {
+  // WR = 20 kW = genau die Bestandsanlage -> jeder Zubau wird stark beschnitten
+  const mitWr = await runAssessment({ ...config, plant: { wechselrichterKw: 20 } }, buildHa(), { pvgisFetch });
+  const ohneWr = await runAssessment(config, buildHa(), { pvgisFetch });
+  const big = (r) => r.variants.filter((v) => v.art === 'pv').sort((a, b) => b.addKwp - a.addKwp)[0];
+  assert.ok(big(mitWr).wirkung.mehrErzeugungKwhJahr < big(ohneWr).wirkung.mehrErzeugungKwhJahr, 'Deckelung reduziert den Mehrertrag');
+  assert.ok(mitWr.warnings.some((w) => /Wechselrichter/.test(w)), 'Warnung mit Verlustangabe');
+  assert.strictEqual(mitWr.plant.wechselrichterKw, 20);
+});
+
+test('Inbetriebnahme: EEG-Restlaufzeit wird berechnet, baldiges Auslaufen wird zum Hebel', async () => {
+  const alt = await runAssessment({ ...config, plant: { inbetriebnahme: '1998-06' } }, buildHa(), { pvgisFetch });
+  assert.ok(alt.plant.anlage, 'Anlagendaten vorhanden');
+  assert.strictEqual(alt.plant.anlage.eegVerguetungBis, 2018, 'Vergütung endet am 31.12. von IBN+20');
+  assert.strictEqual(alt.plant.anlage.eegRestJahre, 0, '1998 + 20 Jahre sind vorbei');
+  assert.ok(alt.hebel.some((h) => /ausgelaufen/.test(h.thema)), 'Hinweis auf ausgelaufene Vergütung');
+
+  const juenger = await runAssessment({ ...config, plant: { inbetriebnahme: '2023' } }, buildHa(), { pvgisFetch });
+  assert.ok(juenger.plant.anlage.eegRestJahre > 10);
+  assert.ok(!juenger.hebel.some((h) => /ausgelaufen|läuft aus/.test(h.thema)));
+
+  const kaputt = await runAssessment({ ...config, plant: { inbetriebnahme: 'irgendwann' } }, buildHa(), { pvgisFetch });
+  assert.ok(kaputt.warnings.some((w) => /nicht lesbar/.test(w)), 'unlesbares Datum wird gemeldet');
+
+  const ohne = await runAssessment(config, buildHa(), { pvgisFetch });
+  assert.ok(ohne.dataGaps.some((g) => g.feld === 'plant.inbetriebnahme'), 'fehlendes Jahr ist eine Datenlücke');
+});
+
+test('Wärmepumpe/Wallbox erzeugen den Lastverschiebungs-Hebel', async () => {
+  const mit = await runAssessment({ ...config, plant: { waermepumpe: true, wallbox: true } }, buildHa(), { pvgisFetch });
+  const h = mit.hebel.find((x) => /Lastverschiebung/.test(x.thema));
+  assert.ok(h, 'Hebel vorhanden');
+  assert.match(h.text, /Wärmepumpe und Wallbox/);
+  assert.match(h.text, /VOR einer Speicher-Investition/);
+  assert.deepStrictEqual(mit.plant.flexLasten, ['Wärmepumpe', 'Wallbox']);
+
+  const ohne = await runAssessment(config, buildHa(), { pvgisFetch });
+  assert.ok(!ohne.hebel.some((x) => /Lastverschiebung/.test(x.thema)), 'ohne Angabe kein Hebel');
+});

@@ -32,7 +32,11 @@ const DEFAULT_CONFIG = {
     batteryKwh: null, // nutzbare Speicherkapazität
     neigung: 35, // Dachneigung in Grad (für den PVGIS-Sollvergleich)
     ausrichtung: 'sued', // sued | suedost | suedwest | ost | west | nord
-    freieFlaecheKwp: null, // wie viel Zubau das Dach hergibt (optional)
+    freieFlaecheKwp: null, // wie viel Zubau das Dach hergibt (null = unbegrenzt)
+    inbetriebnahme: null, // Jahr oder 'YYYY-MM' – Restlaufzeit der EEG-Vergütung + Alterung
+    wechselrichterKw: null, // AC-Nennleistung des Wechselrichters (begrenzt die Einspeiseleistung)
+    waermepumpe: false, // Kunde hat eine Wärmepumpe (verschiebbare Last)
+    wallbox: false, // Kunde hat eine Wallbox/E-Auto (verschiebbare Last)
   },
   assess: {}, // überschriebene Annahmen der Wirtschaftlichkeitsrechnung (siehe assess/economics DEFAULTS)
   zielAmortisation: 10, // Jahre, die eine Investition höchstens brauchen darf

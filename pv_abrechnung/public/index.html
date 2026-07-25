@@ -359,7 +359,12 @@
       <div class="grid3">
         <div><label>Modulleistung (kWp)</label><input id="asKwp" type="number" step="0.1" placeholder="automatisch" /></div>
         <div><label>Speicher nutzbar (kWh)</label><input id="asBat" type="number" step="0.1" placeholder="automatisch" /></div>
-        <div><label>Freier Platz für Zubau (kWp)</label><input id="asFrei" type="number" step="0.1" placeholder="unbegrenzt" /></div>
+        <div><label>Freier Platz für Zubau (kWp)</label><input id="asFrei" type="number" step="0.1" placeholder="unbegrenzt" />
+          <div class="hint">Begrenzt die vorgeschlagenen Varianten auf das, was das Dach hergibt.</div></div>
+        <div><label>Inbetriebnahme (Jahr oder Jahr-Monat)</label><input id="asInbetriebnahme" placeholder="z.B. 2019 oder 2019-06" />
+          <div class="hint">Für die Restlaufzeit der 20-jährigen EEG-Vergütung und die Alterseinordnung.</div></div>
+        <div><label>Wechselrichter-Nennleistung (kW)</label><input id="asWr" type="number" step="0.1" placeholder="unbekannt" />
+          <div class="hint">Deckelt die Erzeugung: Zubau über diese Grenze wird realistisch (beschnitten) gerechnet.</div></div>
         <div><label>Dachneigung (Grad)</label><input id="asNeigung" type="number" min="0" max="90" step="1" /></div>
         <div><label>Ausrichtung</label>
           <select id="asAusrichtung">
@@ -371,6 +376,14 @@
         <div><label>Kosten Modul-Zubau (€/kWp)</label><input id="asKostenPv" type="number" step="10" /></div>
         <div><label>Kosten Speicher (€/kWh nutzbar)</label><input id="asKostenBat" type="number" step="10" /></div>
       </div>
+      <div class="row" style="margin-top:8px">
+        <div><label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--text)">
+          <input type="checkbox" id="asWp" style="width:auto" /> Kunde hat eine Wärmepumpe</label></div>
+        <div><label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--text)">
+          <input type="checkbox" id="asWallbox" style="width:auto" /> Kunde hat eine Wallbox / ein E-Auto</label></div>
+      </div>
+      <div class="hint">Wärmepumpe/Wallbox sind verschiebbare Lasten: die Bewertung zeigt dann den Hebel „Lastverschiebung" –
+        gleiche Wirkung wie ein Speicher, aber ohne Investition.</div>
       <div class="hint">Alle Beträge sind Endpreise (auf PV und Speicher gilt der Nullsteuersatz). Gerechnet wird
         durchgängig nominal – Zins und Preissteigerung müssen zueinander passen.</div>
     </details>

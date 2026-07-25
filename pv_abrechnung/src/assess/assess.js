@@ -26,11 +26,16 @@ const round = (n, d = 2) => {
   return Math.round((n + Number.EPSILON) * f) / f;
 };
 
-/** Stufen für den Zubau, an die Anlagengröße angepasst. */
-function pvSteps(kwp) {
-  if (!kwp) return [5, 10, 20];
-  const base = [0.25, 0.5, 1.0, 1.5].map((f) => Math.round(kwp * f * 2) / 2);
-  return [...new Set(base.filter((v) => v >= 1))];
+/** Stufen für den Zubau, an die Anlagengröße angepasst und ggf. durch die Dachfläche begrenzt. */
+function pvSteps(kwp, maxKwp) {
+  let base = !kwp ? [5, 10, 20] : [0.25, 0.5, 1.0, 1.5].map((f) => Math.round(kwp * f * 2) / 2);
+  const limit = Number(maxKwp);
+  if (Number.isFinite(limit) && limit > 0) {
+    base = base.filter((v) => v <= limit);
+    // Die maximale Belegung ist immer eine interessante Variante.
+    if (!base.includes(limit)) base.push(limit);
+  }
+  return [...new Set(base.filter((v) => v >= 1))].sort((a, b) => a - b);
 }
 function batterySteps(existing, verbrauchJahr) {
   // Orientierung: 1 kWh Speicher je 1000 kWh Jahresverbrauch ist eine gängige Hausnummer;
@@ -156,8 +161,23 @@ async function runAssessment(config, ha, opts = {}) {
   // --- 4./5. Varianten ---
   const verbrauchJahr = round(profile.totals.verbrauch * yf, 0);
   const variants = [];
+  // AC-Nennleistung des Wechselrichters: mehr als das kann in keiner Stunde eingespeist bzw.
+  // genutzt werden. Ohne diese Deckelung würde ein Zubau ohne WR-Tausch überschätzt.
+  const wrKw = Number((config.plant || {}).wechselrichterKw) || null;
+  const clipStats = { variants: {} };
   const mkVariant = (label, art, addKwp, addKwh, shape) => {
-    const g = addKwp ? scaleGeneration(gen, kwp, addKwp, shape) : gen;
+    let g = addKwp ? scaleGeneration(gen, kwp, addKwp, shape) : gen;
+    if (addKwp && wrKw) {
+      let verloren = 0;
+      g = g.map((v) => {
+        if (v > wrKw) {
+          verloren += v - wrKw;
+          return wrKw;
+        }
+        return v;
+      });
+      if (verloren > 0.5) clipStats.variants[label] = round(verloren * yf, 0);
+    }
     const neueKapazitaet = batteryKwh + (addKwh || 0);
     const sim = simulate({
       generation: g,
@@ -238,15 +258,31 @@ async function runAssessment(config, ha, opts = {}) {
 
   const canScalePv = !!kwp;
   if (canScalePv) {
-    for (const add of pvSteps(kwp)) mkVariant(`+${add} kWp Module`, 'pv', add, 0);
+    const maxZubau = (config.plant || {}).freieFlaecheKwp;
+    const steps = pvSteps(kwp, maxZubau);
+    if (!steps.length && Number(maxZubau) > 0) {
+      warnings.push(`Der angegebene freie Platz (${maxZubau} kWp) ist kleiner als die kleinste sinnvolle Zubaustufe – es werden keine PV-Varianten gerechnet.`);
+    }
+    for (const add of steps) mkVariant(`+${add} kWp Module${Number(maxZubau) === add ? ' (maximale Dachbelegung)' : ''}`, 'pv', add, 0);
   } else {
     dataGaps.push({ was: 'Modulleistung (kWp)', warum: 'Ohne kWp kann eine PV-Erweiterung nicht hochgerechnet werden.', feld: 'kwp' });
   }
   for (const add of batterySteps(batteryKwh, verbrauchJahr)) mkVariant(`+${add} kWh Speicher`, 'battery', 0, add);
   if (canScalePv) {
-    const pv = pvSteps(kwp)[1] || pvSteps(kwp)[0];
+    const comboSteps = pvSteps(kwp, (config.plant || {}).freieFlaecheKwp);
+    const pv = comboSteps[1] || comboSteps[0];
     const bat = batterySteps(batteryKwh, verbrauchJahr)[1] || batterySteps(batteryKwh, verbrauchJahr)[0];
     if (pv && bat) mkVariant(`+${pv} kWp Module und +${bat} kWh Speicher`, 'combo', pv, bat);
+  }
+
+  // Wechselrichter-Deckelung transparent machen: verlorene Energie je Variante.
+  const clipped = Object.entries(clipStats.variants);
+  if (clipped.length) {
+    warnings.push(
+      `Der Wechselrichter (${wrKw} kW) begrenzt den Zubau: ` +
+        clipped.map(([l, kwh]) => `bei „${l}" gehen dadurch rund ${kwh} kWh/Jahr verloren`).join(', ') +
+        '. Die Varianten sind bereits mit dieser Deckelung gerechnet; ein größerer Wechselrichter würde entsprechend mehr bringen.'
+    );
   }
 
   const empfehlung = bestForTarget(variants, zielJahre);
@@ -291,12 +327,69 @@ async function runAssessment(config, ha, opts = {}) {
       wirkung: 'Warnung',
     });
   }
+  // Verschiebbare Lasten beim Kunden: Wärmepumpe/Wallbox können gezielt in die
+  // Überschussstunden gelegt werden – gleicher Effekt wie ein Speicher, aber ohne Investition.
+  const flexLasten = [];
+  if ((config.plant || {}).waermepumpe) flexLasten.push('Wärmepumpe');
+  if ((config.plant || {}).wallbox) flexLasten.push('Wallbox');
+  if (flexLasten.length && istSim.einspeisung > 0 && preise.lieferung > preise.einspeisung) {
+    const diffCt = round((preise.lieferung - (preise.einspeisungAnBetreiber ? preise.einspeisung : 0)) * 100, 1);
+    hebel.push({
+      thema: `Lastverschiebung: ${flexLasten.join(' und ')} vorhanden`,
+      text:
+        `Der Kunde hat ${flexLasten.join(' und ')} – also verschiebbare Last. Jede kWh, die davon in die ` +
+        `Überschussstunden (mittags) verlegt wird, wird vom Betreiber geliefert statt eingespeist und bringt ` +
+        `${diffCt} ct/kWh mehr – ohne jede Investition. In Home Assistant lässt sich das automatisieren ` +
+        `(z.B. Wärmepumpe/Wallbox bei PV-Überschuss freigeben). Das ist der gleiche Effekt wie ein Speicher ` +
+        `und sollte VOR einer Speicher-Investition ausgeschöpft werden.`,
+      wirkung: 'sofort, ohne Investition',
+    });
+  }
   if (istSim.ungenutzterUeberschuss > 0 && batteryKwh > 0) {
     hebel.push({
       thema: 'Speicher läuft voll',
       text: `${round(istSim.ungenutzterUeberschuss * yf, 0)} kWh/Jahr Überschuss passen nicht in den Speicher. Das ist genau die Menge, die ein größerer Speicher zusätzlich verwerten könnte.`,
       wirkung: 'Grundlage der Speicher-Dimensionierung',
     });
+  }
+
+  // Anlagenalter und Restlaufzeit der EEG-Vergütung der Bestandsanlage.
+  // Die Vergütung läuft 20 volle Kalenderjahre ab Inbetriebnahme (plus Inbetriebnahmejahr).
+  let anlage = null;
+  const ibRaw = (config.plant || {}).inbetriebnahme;
+  if (ibRaw) {
+    const m = /^(\d{4})(?:-(\d{1,2}))?$/.exec(String(ibRaw).trim());
+    if (m) {
+      const ibJahr = Number(m[1]);
+      const jetzt = new Date(opts.now || Date.now());
+      const alterJahre = round(jetzt.getFullYear() - ibJahr + (jetzt.getMonth() + 1 - (m[2] ? Number(m[2]) : 6)) / 12, 1);
+      // Vergütung: 20 volle Kalenderjahre zusätzlich zum (Rest-)Inbetriebnahmejahr,
+      // d.h. sie endet am 31.12. von Inbetriebnahmejahr + 20.
+      const eegBis = ibJahr + 20;
+      const eegRest = Math.max(0, eegBis - jetzt.getFullYear());
+      anlage = { inbetriebnahme: String(ibRaw), alterJahre, eegVerguetungBis: eegBis, eegRestJahre: eegRest };
+      if (alterJahre > 0 && alterJahre <= 40) {
+        const erwarteterVerlust = round(alterJahre * annahmen.degradationPv, 1);
+        anlage.erwarteteDegradationProzent = erwarteterVerlust;
+      }
+      if (eegRest === 0) {
+        hebel.push({
+          thema: 'EEG-Vergütung der Bestandsanlage ausgelaufen',
+          text: `Die Anlage ist von ${ibJahr}; die 20-jährige EEG-Vergütung ist abgelaufen. Für eingespeisten Strom gibt es nur noch den Marktwert bzw. eine Auffanglösung – umso wichtiger, möglichst viel direkt an den Kunden zu liefern (Speicher, Lastverschiebung).`,
+          wirkung: 'Warnung',
+        });
+      } else if (eegRest <= 5) {
+        hebel.push({
+          thema: 'EEG-Vergütung läuft aus',
+          text: `Die Bestandsanlage (Inbetriebnahme ${ibJahr}) erhält ihre Einspeisevergütung nur noch bis Ende ${anlage.eegVerguetungBis} (${eegRest} Jahre). Danach zählt praktisch nur noch die Lieferung an den Kunden – das spricht eher für einen Speicher als für reine Modul-Erweiterung, und die Wirtschaftlichkeitsrechnung der Einspeiseerlöse ist nur für die Restlaufzeit belastbar.`,
+          wirkung: 'Planungshinweis',
+        });
+      }
+    } else {
+      warnings.push(`Inbetriebnahme „${ibRaw}" nicht lesbar – bitte als Jahr (z.B. 2019) oder Jahr-Monat (2019-06) angeben.`);
+    }
+  } else {
+    dataGaps.push({ was: 'Inbetriebnahmejahr der Anlage', warum: 'Ohne das Jahr sind Restlaufzeit der EEG-Vergütung und Alterseinordnung nicht bestimmbar.', feld: 'plant.inbetriebnahme' });
   }
 
   // Rechtliche Rahmenbedingungen der Erweiterung (Hinweise, keine Rechtsberatung).
@@ -316,6 +409,10 @@ async function runAssessment(config, ha, opts = {}) {
       hasBattery: plant.hasBattery,
       candidates: plant.candidates,
       notes: plant.notes,
+      wechselrichterKw: wrKw,
+      freieFlaecheKwp: Number((config.plant || {}).freieFlaecheKwp) || null,
+      flexLasten,
+      anlage,
     },
     ist: {
       bilanz: istSim,
