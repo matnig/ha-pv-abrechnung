@@ -79,6 +79,16 @@ function attachReviews(anomalies) {
   return (anomalies || []).map((a) => ({ ...a, id: anomalyId(a), review: reviews[anomalyId(a)] || null }));
 }
 
+// Markiert Bewertungen als „im Incident-Report dokumentiert" (mit Zeitstempel des Versands),
+// damit der nächste Report nur noch NEUE (seit dem letzten Versand hinzugekommene) enthält.
+function markReviewsReported(ids, at = Date.now()) {
+  const reviews = loadReviews();
+  for (const id of ids || []) {
+    if (reviews[id]) reviews[id].reportedAt = at;
+  }
+  saveReviews(reviews);
+}
+
 // Protokoll der abgesendeten Incident-Reports (wer/wann/wie viele).
 function logIncidentReport(entry) {
   const list = readJson(PROTO_FILE, []);
@@ -90,4 +100,4 @@ function loadProtocol() {
   return readJson(PROTO_FILE, []);
 }
 
-module.exports = { anomalyId, loadReviews, listAnomalies, setReview, attachReviews, logIncidentReport, loadProtocol };
+module.exports = { anomalyId, loadReviews, listAnomalies, setReview, attachReviews, markReviewsReported, logIncidentReport, loadProtocol };

@@ -133,11 +133,13 @@ function createServer() {
       const config = loadConfig();
       const user = haUser(req);
       const sentBy = user.name || user.id || 'Unbekannt';
-      // Dokumentiert die bereits bewerteten Auffälligkeiten (Archiv).
-      const anomalies = reviews.listAnomalies().filter((a) => a.review);
-      if (!anomalies.length) return res.status(400).json({ error: 'Keine bewerteten Auffälligkeiten zum Dokumentieren.' });
+      // Nur bewertete Auffälligkeiten, die im letzten Versand NOCH NICHT dabei waren (inkrementell).
+      const anomalies = reviews.listAnomalies().filter((a) => a.review && !a.review.reportedAt);
+      if (!anomalies.length) return res.status(400).json({ error: 'Keine neuen bewerteten Auffälligkeiten seit dem letzten Versand.' });
       const sentAt = Date.now();
       const mail = await sendIncidentReport(config, { anomalies, sentBy, sentAt });
+      // Erst nach erfolgreichem Versand als dokumentiert markieren.
+      reviews.markReviewsReported(anomalies.map((a) => a.id), sentAt);
       const critical = anomalies.filter((a) => a.review && a.review.classification === 'kritisch').length;
       const recips = (config.alertRecipients && config.alertRecipients.length ? config.alertRecipients : config.recipients) || [];
       reviews.logIncidentReport({ at: sentAt, by: sentBy, byId: user.id || null, count: anomalies.length, critical, recipients: recips });

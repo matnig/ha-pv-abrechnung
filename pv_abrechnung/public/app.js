@@ -455,10 +455,10 @@ async function reviewAnomaly(encId, classification) {
 }
 
 async function sendIncidentReport() {
-  if (!confirm('Incident-Report jetzt absenden? Es wird eine Dokumentations-Mail mit allen Auffälligkeiten und Bewertungen verschickt.')) return;
+  if (!confirm('Incident-Report jetzt absenden? Es werden nur die seit dem letzten Versand neu bewerteten Auffälligkeiten dokumentiert.')) return;
   try {
     const r = await api('api/incident-report/send', { method: 'POST', body: JSON.stringify({}) });
-    flash(`Incident-Report versendet: ${r.count} Auffälligkeiten (${r.critical} kritisch), abgesendet von ${r.by}.`);
+    flash(`Incident-Report versendet: ${r.count} neue Auffälligkeiten (${r.critical} kritisch), abgesendet von ${r.by}.`);
     loadAnomalies();
   } catch (e) {
     flash('Incident-Report fehlgeschlagen: ' + e.message, false);
@@ -475,9 +475,9 @@ function renderArchive() {
             <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
               <div><b>${esc(a.name || a.entityId)}</b> – ${esc(ANOMALY_LABEL[a.type] || a.type)}
                 <span class="tag">${new Date(a.at).toLocaleString('de-DE')}</span></div>
-              <div>${anomalyBadge(r)}</div>
+              <div>${anomalyBadge(r)} ${r.reportedAt ? '<span class="tag">✉ dokumentiert</span>' : '<span class="tag" style="color:#b45309">noch nicht dokumentiert</span>'}</div>
             </div>
-            <div class="tag">bewertet von ${esc(r.reviewedByName)} am ${new Date(r.reviewedAt).toLocaleString('de-DE')}${r.note ? ' · ' + esc(r.note) : ''}</div>
+            <div class="tag">bewertet von ${esc(r.reviewedByName)} am ${new Date(r.reviewedAt).toLocaleString('de-DE')}${r.note ? ' · ' + esc(r.note) : ''}${r.reportedAt ? ' · im Report vom ' + new Date(r.reportedAt).toLocaleString('de-DE') : ''}</div>
           </div>`;
         })
         .join('')

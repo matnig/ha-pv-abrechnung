@@ -58,6 +58,36 @@ test('kritisch-Einstufung + Incident-Protokoll', () => {
   assert.strictEqual(proto[0].critical, 1);
 });
 
+test('Incident-Report inkrementell: markReviewsReported blendet bereits dokumentierte aus', () => {
+  process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'pv-inc-rep-'));
+  writeJson('snapshots.json', {
+    'sensor.a': { anomalies: [{ type: 'stale', at: 100, entityId: 'sensor.a', name: 'A' }] },
+    'sensor.b': { anomalies: [{ type: 'offline', at: 200, entityId: 'sensor.b', name: 'B' }] },
+  });
+  const [a1, a2] = reviews.listAnomalies();
+  reviews.setReview(a1.id, { classification: 'kritisch', user: { name: 'X' } });
+  reviews.setReview(a2.id, { classification: 'unkritisch', user: { name: 'X' } });
+
+  // erster Versand: beide neu
+  let neu = reviews.listAnomalies().filter((a) => a.review && !a.review.reportedAt);
+  assert.strictEqual(neu.length, 2);
+  reviews.markReviewsReported(neu.map((a) => a.id), 5000);
+
+  // zweiter Versand ohne neue Bewertung: keine neuen mehr
+  neu = reviews.listAnomalies().filter((a) => a.review && !a.review.reportedAt);
+  assert.strictEqual(neu.length, 0);
+
+  // neue Auffälligkeit hinzufügen + bewerten -> nur diese ist beim nächsten Versand dabei
+  const snap = require('../src/store/store').readJson('snapshots.json', {});
+  snap['sensor.c'] = { anomalies: [{ type: 'stale', at: 300, entityId: 'sensor.c', name: 'C' }] };
+  writeJson('snapshots.json', snap);
+  const c = reviews.listAnomalies().find((a) => a.entityId === 'sensor.c');
+  reviews.setReview(c.id, { classification: 'kritisch', user: { name: 'X' } });
+  neu = reviews.listAnomalies().filter((a) => a.review && !a.review.reportedAt);
+  assert.strictEqual(neu.length, 1);
+  assert.strictEqual(neu[0].entityId, 'sensor.c');
+});
+
 test('Config migriert Alt-Einzelsensor batterySensor -> batteries[]', () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'pv-mig-'));
   writeJson('config.json', { meters: [], batterySensor: 'sensor.soc_alt' });
