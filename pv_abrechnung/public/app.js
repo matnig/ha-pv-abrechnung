@@ -629,6 +629,7 @@ function showTab(name) {
   if (name === 'overview') loadOverview();
   else if (name === 'incident') loadAnomalies();
   else if (name === 'abrechnung') loadLedger();
+  else if (name === 'bewertung') fillAssessForm();
   try { history.replaceState(null, '', '#' + name); } catch { /* ignore */ }
   window.scrollTo(0, 0);
 }
@@ -725,6 +726,209 @@ async function loadOverview() {
   }
 }
 
+// ---- Anlagenbewertung ----
+const eur = (n) => (n == null ? '–' : Number(n).toLocaleString('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }));
+const jahre = (n) => (n == null ? 'nie' : Number(n).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' Jahre');
+const BEWERTUNG_FARBE = { gut: '#166534', auffällig: '#b45309', kritisch: '#b91c1c', unbekannt: '#6b7280', Hinweis: '#2563eb', warnung: '#b91c1c' };
+
+function fillAssessForm() {
+  const p = (config && config.plant) || {};
+  const a = (config && config.assess) || {};
+  if ($('asZiel')) $('asZiel').value = (config && config.zielAmortisation) || 10;
+  if ($('asKwp')) $('asKwp').value = p.kwp ?? '';
+  if ($('asBat')) $('asBat').value = p.batteryKwh ?? '';
+  if ($('asFrei')) $('asFrei').value = p.freieFlaecheKwp ?? '';
+  if ($('asNeigung')) $('asNeigung').value = p.neigung ?? 35;
+  if ($('asAusrichtung')) $('asAusrichtung').value = p.ausrichtung || 'sued';
+  if ($('asZins')) $('asZins').value = a.kalkulationszins ?? 3;
+  if ($('asSteigerung')) $('asSteigerung').value = a.strompreissteigerung ?? 2;
+  if ($('asKostenPv')) $('asKostenPv').value = a.kostenPvMarginalProKwp ?? 750;
+  if ($('asKostenBat')) $('asKostenBat').value = a.kostenBatterieProKwh ?? 450;
+}
+
+async function runAssess() {
+  const el = $('asResult');
+  el.innerHTML = '<div class="card"><b>Bewertung läuft…</b><div class="mini">Stundenwerte werden aus der Home-Assistant-Statistik gelesen und durchgerechnet. Das dauert einige Sekunden.</div></div>';
+  // Eingaben in die Konfiguration übernehmen, damit sie dauerhaft gelten
+  const numOrNull = (id) => { const v = ($(id) || {}).value; return v === '' || v == null ? null : Number(v); };
+  config.plant = {
+    ...(config.plant || {}),
+    kwp: numOrNull('asKwp'), batteryKwh: numOrNull('asBat'), freieFlaecheKwp: numOrNull('asFrei'),
+    neigung: numOrNull('asNeigung') ?? 35, ausrichtung: $('asAusrichtung').value,
+  };
+  config.assess = {
+    ...(config.assess || {}),
+    kalkulationszins: numOrNull('asZins') ?? 3, strompreissteigerung: numOrNull('asSteigerung') ?? 2,
+    kostenPvMarginalProKwp: numOrNull('asKostenPv') ?? 750, kostenBatterieProKwh: numOrNull('asKostenBat') ?? 450,
+  };
+  config.zielAmortisation = Number($('asZiel').value) || 10;
+  try {
+    await api('api/config', { method: 'PUT', body: JSON.stringify(config) });
+    const r = await api('api/assess', {
+      method: 'POST',
+      body: JSON.stringify({ zielAmortisation: config.zielAmortisation, months: Number($('asMonths').value) || 12, annahmen: config.assess, skipPvgis: $('asSkipPvgis').checked }),
+    });
+    renderAssess(r);
+  } catch (e) {
+    el.innerHTML = `<div class="card"><b style="color:#b91c1c">Bewertung fehlgeschlagen</b><div class="mini">${esc(e.message)}</div></div>`;
+  }
+}
+
+function renderAssess(r) {
+  const el = $('asResult');
+  if (!r.ok) {
+    el.innerHTML = `<div class="card"><h2>Bewertung nicht möglich</h2><p>${esc(r.grund)}</p>
+      ${r.coverage ? `<div class="mini">Gefundene Datenbasis: ${r.coverage.days || 0} Tage, ${r.coverage.hoursWithData || 0} Stunden mit Werten.</div>` : ''}</div>`;
+    return;
+  }
+  const c = r.coverage;
+  const ist = r.ist;
+  const out = [];
+
+  // Datenlage
+  out.push(`<div class="card">
+    <h2>Datengrundlage</h2>
+    <span class="kpi">${c.days} Tage (${c.months} Monate)</span>
+    <span class="kpi" style="color:${c.fullYear ? '#166534' : '#b45309'}">${c.fullYear ? 'vollständiges Jahr' : 'Hochrechnung × ' + c.yearFactor}</span>
+    ${r.standort ? `<span class="kpi">Standort aus HA: ${esc(String(r.standort.lat))}, ${esc(String(r.standort.lon))}</span>` : ''}
+    ${(r.warnings || []).map((w) => `<div class="hint" style="color:#b45309">⚠ ${esc(w)}</div>`).join('')}
+  </div>`);
+
+  // Fehlende Angaben
+  if ((r.dataGaps || []).length) {
+    out.push(`<div class="card" style="border-color:#f59e0b">
+      <h2>⚠ Fehlende Angaben</h2>
+      <p class="mini">Diese Werte fehlen für eine belastbare Rechnung. Solange sie fehlen, wird lieber nichts behauptet, als geraten.</p>
+      <ul>${r.dataGaps.map((g) => `<li><b>${esc(g.was)}</b> – ${esc(g.warum)}</li>`).join('')}</ul>
+    </div>`);
+  }
+
+  // Ist-Zustand
+  const p = r.plant;
+  const src = (x) => (x ? `<span class="tag">${x.source === 'config' ? 'eingetragen' : x.source === 'sensor' ? 'aus HA-Sensor' : 'geschätzt'}${x.via ? ': ' + esc(x.via) : ''}</span>` : '');
+  out.push(`<div class="card">
+    <h2>Ist-Zustand</h2>
+    <div>
+      <span class="kpi">Module: <b>${p.kwp ? p.kwp.value + ' kWp' : 'unbekannt'}</b></span>
+      <span class="kpi">Speicher: <b>${p.batteryKwh ? p.batteryKwh.value + ' kWh' : p.hasBattery ? 'vorhanden, Größe unbekannt' : 'keiner'}</b></span>
+      <span class="kpi">Eigenverbrauchsquote: <b>${ist.quoten.eigenverbrauchsquote ?? '–'}%</b></span>
+      <span class="kpi">Autarkie des Kunden: <b>${ist.quoten.autarkie ?? '–'}%</b></span>
+    </div>
+    <div class="mini" style="margin-top:4px">${src(p.kwp)} ${src(p.batteryKwh)}</div>
+    <table style="margin-top:10px"><tbody>
+      <tr><td>Erzeugung</td><td class="num"><b>${esc(fmtEnergy(ist.jahr.erzeugung))}</b>/Jahr</td></tr>
+      <tr><td>davon an den Kunden geliefert</td><td class="num">${esc(fmtEnergy(ist.jahr.eigenverbrauch))}</td></tr>
+      <tr><td>davon ins Netz eingespeist</td><td class="num">${esc(fmtEnergy(ist.jahr.einspeisung))} <span class="tag">${ist.einspeisungAnteilProzent}% der Erzeugung</span></td></tr>
+      <tr><td>Netzbezug des Kunden</td><td class="num">${esc(fmtEnergy(ist.jahr.netzbezug))}</td></tr>
+      <tr><td><b>Erlös des Betreibers</b></td><td class="num"><b>${eur(ist.jahr.erloes)}</b>/Jahr</td></tr>
+    </tbody></table>
+    ${ist.soll ? `<div class="hint">Standort-Soll laut PVGIS: ${ist.soll.yearKwhPerKwp} kWh je kWp und Jahr (${esc(ist.soll.source)}).</div>` : ''}
+  </div>`);
+
+  // Gesundheit
+  const h = r.health;
+  out.push(`<div class="card">
+    <h2>Zustand der Anlage: <span style="color:${BEWERTUNG_FARBE[h.gesamt] || '#6b7280'}">${esc(h.gesamt)}</span></h2>
+    ${h.kennzahlen.spezifischerErtragJahr ? `<span class="kpi">${h.kennzahlen.spezifischerErtragJahr} kWh/kWp·Jahr</span>` : ''}
+    ${h.kennzahlen.sollErfuellung ? `<span class="kpi" style="color:${h.kennzahlen.sollErfuellung >= 90 ? '#166534' : h.kennzahlen.sollErfuellung >= 75 ? '#b45309' : '#b91c1c'}">${h.kennzahlen.sollErfuellung}% des Standort-Solls</span>` : ''}
+    ${h.kennzahlen.speicherVollzyklenJahr != null ? `<span class="kpi">${h.kennzahlen.speicherVollzyklenJahr} Speicher-Vollzyklen/Jahr</span>` : ''}
+    ${h.kennzahlen.ausfallstundenKernzeit != null ? `<span class="kpi">${h.kennzahlen.ausfallstundenKernzeit}% Ausfallstunden (9–15 Uhr)</span>` : ''}
+    <div style="margin-top:10px">${h.findings.map((f) => `<div style="border-left:3px solid ${BEWERTUNG_FARBE[f.bewertung] || '#6b7280'};padding:4px 10px;margin-bottom:8px">
+      <b>${esc(f.thema)}</b> <span style="color:${BEWERTUNG_FARBE[f.bewertung] || '#6b7280'}">${esc(f.bewertung)}</span>
+      <div class="mini" style="color:var(--text)">${esc(f.text)}</div>
+      ${f.hinweis ? `<div class="hint" style="color:#b45309">${esc(f.hinweis)}</div>` : ''}
+    </div>`).join('')}</div>
+  </div>`);
+
+  // Leistungsabfall über die Zeit
+  const t = r.trend;
+  if (t) {
+    const schwerste = (t.befunde || []).reduce((w, b) => (b.schwere === 'kritisch' ? b : w.schwere === 'kritisch' ? w : b.schwere === 'auffällig' ? b : w), (t.befunde || [{}])[0]);
+    out.push(`<div class="card"${schwerste && schwerste.schwere === 'kritisch' ? ' style="border-color:#b91c1c"' : schwerste && schwerste.schwere === 'auffällig' ? ' style="border-color:#f59e0b"' : ''}>
+      <h2>Leistungsentwicklung</h2>
+      ${!t.ok ? `<p class="mini">${esc(t.grund || 'nicht bewertbar')}</p>` : ''}
+      ${(t.verfahren || []).map((v) => `<div class="tag">${/nicht möglich/.test(v) ? '⚠ ' : '✓ '}${esc(v)}</div>`).join('')}
+      ${t.trend ? `<div style="margin-top:8px"><span class="kpi">früher ${t.trend.frueher}% des Erwartungswerts</span><span class="kpi">zuletzt ${t.trend.zuletzt}%</span><span class="kpi" style="color:${t.trend.aenderungProzentpunkte <= -10 ? '#b91c1c' : '#166534'}">${t.trend.aenderungProzentpunkte > 0 ? '+' : ''}${t.trend.aenderungProzentpunkte} Prozentpunkte</span></div>` : ''}
+      <div style="margin-top:10px">${(t.befunde || []).map((b) => `<div style="border-left:3px solid ${BEWERTUNG_FARBE[b.schwere] || '#6b7280'};padding:4px 10px;margin-bottom:8px">
+        <b>${b.art === 'leistungsabfall' ? 'Leistungsabfall erkannt' : b.art === 'trend' ? 'Nachlassende Leistung im Zeitverlauf' : b.art === 'beobachtung' ? 'Beobachtung' : 'Unauffällig'}</b>
+        <span style="color:${BEWERTUNG_FARBE[b.schwere] || '#6b7280'}">${esc(b.schwere)}</span>${b.laufend ? ' <span class="tag" style="color:#b91c1c">hält aktuell an</span>' : ''}
+        <div class="mini" style="color:var(--text)">${esc(b.text)}</div></div>`).join('')}</div>
+      ${(t.monate || []).length ? `<div style="overflow-x:auto;margin-top:8px"><table>
+        <thead><tr><th>Monat</th><th class="num">gemessen</th><th class="num">erwartet</th><th class="num">Quote</th><th class="num">Vorjahr</th></tr></thead>
+        <tbody>${t.monate.map((m) => `<tr><td>${esc(String(m.key))}${m.abdeckung < 100 ? ` <span class="tag">${m.abdeckung}% erfasst</span>` : ''}</td>
+          <td class="num">${esc(fmtEnergy(m.kwh))}</td>
+          <td class="num">${m.erwartetKwh != null ? esc(fmtEnergy(m.erwartetKwh)) : '–'}</td>
+          <td class="num" style="color:${m.quoteSoll == null ? '#6b7280' : m.quoteSoll >= 90 ? '#166534' : m.quoteSoll >= 80 ? '#b45309' : '#b91c1c'}">${m.quoteSoll != null ? m.quoteSoll + '%' : '–'}</td>
+          <td class="num">${m.quoteVorjahr != null ? m.quoteVorjahr + '%' : '–'}</td></tr>`).join('')}</tbody>
+      </table></div>` : ''}
+      <div class="hint">Verglichen wird gegen das Klimamittel des Standorts (PVGIS) und – sofern die Historie reicht – gegen denselben Monat des Vorjahres. Ein einzelner schwacher Monat kann Wetter sein; gemeldet wird erst, wenn mehrere Monate in Folge unter dem Erwartungswert liegen.</div>
+    </div>`);
+  }
+
+  // Empfehlung
+  const e = r.empfehlung;
+  out.push(`<div class="card" style="border-color:${e ? '#16a34a' : '#f59e0b'};border-width:2px">
+    <h2>${e ? '✓ Empfehlung' : 'Keine Variante erreicht dein Ziel'}</h2>
+    ${e
+      ? `<div style="font-size:17px;font-weight:600">${esc(e.label)}</div>
+         <div style="margin-top:6px">
+           <span class="kpi">Investition <b>${eur(e.invest)}</b></span>
+           <span class="kpi">Mehrerlös <b>${eur(e.wirkung.mehrErloesEuroJahr)}</b>/Jahr</span>
+           <span class="kpi">amortisiert in <b>${jahre(e.kennzahlen.amortisationDynamisch)}</b></span>
+           <span class="kpi">Gewinn über ${e.kennzahlen.laufzeit} Jahre <b>${eur(e.kennzahlen.npv)}</b></span>
+         </div>
+         <div class="hint">Bei einer Ziel-Amortisation von ${r.zielAmortisation} Jahren ist das die Variante mit dem höchsten Gesamtgewinn.</div>`
+      : `<p>Mit den gewählten Annahmen amortisiert sich keine Erweiterung innerhalb von <b>${r.zielAmortisation} Jahren</b>.
+         ${r.beste ? `Am besten schneidet noch <b>${esc(r.beste.label)}</b> ab (${eur(r.beste.invest)}, Amortisation ${jahre(r.beste.kennzahlen.amortisationDynamisch)}, Gesamtgewinn ${eur(r.beste.kennzahlen.npv)}).` : ''}</p>
+         <div class="hint">Das ist ein ehrliches Ergebnis, kein Fehler: Wenn der zusätzliche Strom überwiegend eingespeist statt geliefert wird, bringt er nur die Einspeisevergütung – und die liegt weit unter dem Lieferpreis. Prüfe zuerst die Hebel ohne Investition unten.</div>`}
+  </div>`);
+
+  // Varianten
+  out.push(`<div class="card">
+    <h2>Alle geprüften Varianten</h2>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Variante</th><th class="num">Investition</th><th class="num">Mehrerlös/Jahr</th>
+        <th class="num">mehr Lieferung</th><th class="num">mehr Einspeisung</th>
+        <th class="num">Amortisation</th><th class="num">Gesamtgewinn</th><th class="num">Rendite</th></tr></thead>
+      <tbody>${r.variants.map((v) => `<tr${v === e ? ' style="background:#f0fdf4;font-weight:600"' : ''}>
+        <td>${esc(v.label)}${v.eegNeu ? `<div class="tag">Zubau vergütet mit ${(v.eegNeu.satzEffektiv * 100).toLocaleString('de-DE', { maximumFractionDigits: 2 })} ct/kWh</div>` : ''}</td>
+        <td class="num">${eur(v.invest)}</td>
+        <td class="num">${eur(v.wirkung.mehrErloesEuroJahr)}</td>
+        <td class="num">${esc(fmtEnergy(v.wirkung.mehrEigenverbrauchKwhJahr))}</td>
+        <td class="num">${esc(fmtEnergy(v.wirkung.mehrEinspeisungKwhJahr))}</td>
+        <td class="num" style="color:${v.erreichtZiel ? '#166534' : '#6b7280'}">${jahre(v.kennzahlen.amortisationDynamisch)}</td>
+        <td class="num" style="color:${v.kennzahlen.npv >= 0 ? '#166534' : '#b91c1c'}">${eur(v.kennzahlen.npv)}</td>
+        <td class="num">${v.kennzahlen.irr != null ? v.kennzahlen.irr + '%' : '–'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    <div class="hint">„Amortisation" ist die dynamische Amortisation (mit Kalkulationszins ${r.annahmen.kalkulationszins}%, Strompreissteigerung ${r.annahmen.strompreissteigerung}%/Jahr und Alterung). „Gesamtgewinn" ist der Kapitalwert über die Laufzeit in heutigem Geld – inklusive Ersatz von Wechselrichter bzw. Batterie. Wo eine Ersatzinvestition anfällt, wird keine Rendite ausgewiesen, weil sie dann mathematisch nicht eindeutig ist.</div>
+  </div>`);
+
+  // Hebel
+  if ((r.hebel || []).length) {
+    out.push(`<div class="card">
+      <h2>Hebel ohne Investition</h2>
+      ${r.hebel.map((x) => `<div style="border-left:3px solid #2563eb;padding:4px 10px;margin-bottom:8px">
+        <b>${esc(x.thema)}</b> <span class="tag">${esc(x.wirkung)}</span>
+        <div class="mini" style="color:var(--text)">${esc(x.text)}</div></div>`).join('')}
+    </div>`);
+  }
+
+  // Recht
+  if ((r.rechtHinweise || []).length) {
+    out.push(`<div class="card">
+      <h2>Rechtliche Rahmenbedingungen</h2>
+      <p class="mini">Hinweise zum Einordnen – keine Rechtsberatung. Vor einer Erweiterung mit Netzbetreiber und Steuerberater klären.</p>
+      ${r.rechtHinweise.map((n) => `<div style="border-left:3px solid ${n.schwere === 'warnung' ? '#b91c1c' : '#6b7280'};padding:4px 10px;margin-bottom:8px">
+        <b>${esc(n.thema)}</b>${n.schwere === 'warnung' ? ' <span style="color:#b91c1c">wichtig</span>' : ''}
+        <div class="mini" style="color:var(--text)">${esc(n.text)}</div></div>`).join('')}
+      <div class="hint">Einspeisevergütungssätze gültig bis ${esc(r.eegSaetze.gueltigBis)} · ${esc(r.eegSaetze.quelle)}</div>
+    </div>`);
+  }
+
+  el.innerHTML = out.join('');
+}
+
 async function init() {
   loadVersion();
   try {
@@ -734,7 +938,7 @@ async function init() {
     await loadIncidents();
     await loadLedger();
     const startTab = (location.hash || '').replace('#', '') || 'overview';
-    showTab(['overview', 'einstellungen', 'berichte', 'incident', 'abrechnung'].includes(startTab) ? startTab : 'overview');
+    showTab(['overview', 'einstellungen', 'berichte', 'incident', 'abrechnung', 'bewertung'].includes(startTab) ? startTab : 'overview');
   } catch (e) {
     flash('Initialisierung fehlgeschlagen: ' + e.message, false);
   }

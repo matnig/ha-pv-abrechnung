@@ -107,6 +107,25 @@ function createServer() {
     }
   });
 
+  // Anlagenbewertung: Zustand, Erweiterungsvarianten, Wirtschaftlichkeit, Tarifhebel.
+  // Läuft länger (Statistik-Abfragen + PVGIS), daher grosszügiger Timeout im Frontend.
+  app.post('/api/assess', async (req, res) => {
+    try {
+      const body = req.body || {};
+      const config = loadConfig();
+      const out = await require('../assess/assess').runAssessment(config, haClient, {
+        zielAmortisation: body.zielAmortisation != null ? Number(body.zielAmortisation) : config.zielAmortisation,
+        months: body.months != null ? Number(body.months) : 12,
+        annahmen: body.annahmen || undefined,
+        skipPvgis: !!body.skipPvgis,
+      });
+      res.json(out);
+    } catch (err) {
+      console.error('[api/assess]', (err && err.stack) || err);
+      res.status(500).json({ error: String((err && err.message) || err) });
+    }
+  });
+
   // Daten-Auffälligkeiten (Incident-Review): offene (aktive) und bereits bewertete (Archiv).
   app.get('/api/anomalies', (req, res) => {
     const all = reviews.listAnomalies();

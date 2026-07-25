@@ -75,12 +75,25 @@ function unitFactorToKwh(unit) {
   return 1; // kWh oder unbekannt -> als kWh behandeln
 }
 
-// Kandidaten für Energiezähler: Einheit Wh/kWh/MWh ODER device_class "energy".
-async function listEnergyEntities() {
+/** Alle Entitäten mit Attributen (für die Anlagen-Erkennung in der Bewertung). */
+async function listAllStates() {
   const res = await authedFetch(`${httpBase()}/states`);
   if (!res.ok) throw new Error(`HA /states -> HTTP ${res.status} ${res.statusText || ''}`.trim());
   const all = await res.json();
   if (!Array.isArray(all)) throw new Error('Unerwartete Antwort von HA (/states ist keine Liste)');
+  return all;
+}
+
+/** HA-Kerneinstellungen – u.a. Standort (latitude/longitude/elevation) und Zeitzone. */
+async function getHaConfig() {
+  const res = await authedFetch(`${httpBase()}/config`);
+  if (!res.ok) throw new Error(`HA /config -> HTTP ${res.status}`);
+  return res.json();
+}
+
+// Kandidaten für Energiezähler: Einheit Wh/kWh/MWh ODER device_class "energy".
+async function listEnergyEntities() {
+  const all = await listAllStates();
   return all
     .filter((s) => {
       const a = s.attributes || {};
@@ -156,4 +169,14 @@ function statisticsDuringPeriod(statisticIds, startISO, endISO, period = 'day') 
   });
 }
 
-module.exports = { getState, listEnergyEntities, statisticsDuringPeriod, isEnergyUnit, unitFactorToKwh, httpBase, wsUrl };
+module.exports = {
+  getState,
+  listEnergyEntities,
+  listAllStates,
+  getHaConfig,
+  statisticsDuringPeriod,
+  isEnergyUnit,
+  unitFactorToKwh,
+  httpBase,
+  wsUrl,
+};

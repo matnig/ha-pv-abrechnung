@@ -59,6 +59,7 @@
     <button class="tab-btn" data-tab="berichte" onclick="showTab('berichte')">Berichte</button>
     <button class="tab-btn" data-tab="incident" onclick="showTab('incident')">Incident Report</button>
     <button class="tab-btn" data-tab="abrechnung" onclick="showTab('abrechnung')">Abrechnung</button>
+    <button class="tab-btn" data-tab="bewertung" onclick="showTab('bewertung')">Bewertung</button>
   </nav>
 
   <section id="tab-overview" class="tab active">
@@ -322,6 +323,60 @@
     <p class="mini">Jeder versendete Bericht wird als Beleg mit Prüfsumme gespeichert (Hash-Kette). Wird ein alter Beleg nachträglich verändert, bricht die Kette und es wird hier angezeigt.</p>
     <div id="ledger" class="mini">–</div>
   </div>
+  </section>
+
+  <section id="tab-bewertung" class="tab">
+  <div class="card">
+    <h2>Anlagenbewertung für den Betreiber</h2>
+    <p class="mini">Bewertet die Anlage auf Grundlage der <b>echten Messdaten</b> aus Home Assistant: Zustand der Anlage,
+      ob eine Erweiterung der Module oder des Speichers wirtschaftlich wäre, und welche Hebel ohne Investition wirken.
+      Gerechnet wird stündlich über den gesamten Zeitraum – jede zusätzliche Kilowattstunde wird dort verbucht, wo sie
+      tatsächlich landet: beim Kunden (Lieferpreis) oder im Netz (Einspeisevergütung).</p>
+    <div class="row">
+      <div style="max-width:220px"><label>Gewünschte Amortisation (Jahre)</label>
+        <input id="asZiel" type="number" min="1" max="40" step="1" value="10" /></div>
+      <div style="max-width:200px"><label>Datenbasis</label>
+        <select id="asMonths">
+          <option value="12">letzte 12 Monate</option>
+          <option value="24">letzte 24 Monate</option>
+          <option value="6">letzte 6 Monate</option>
+          <option value="3">letzte 3 Monate</option>
+        </select></div>
+      <div style="max-width:200px"><button onclick="runAssess()">Anlage bewerten</button></div>
+      <div style="flex:1"><label>&nbsp;</label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text)">
+          <input type="checkbox" id="asSkipPvgis" style="width:auto" /> ohne Internet rechnen (kein Standort-Sollvergleich)</label>
+      </div>
+    </div>
+    <div class="hint">Die Berechnung dauert einige Sekunden: sie liest die Stundenwerte eines ganzen Jahres aus der
+      Home-Assistant-Statistik und fragt für den Soll-Ist-Vergleich den Standort-Ertrag bei PVGIS (EU-Kommission) ab.
+      Die Koordinaten kommen automatisch aus Home Assistant.</div>
+
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;font-size:13px;font-weight:600">Anlagendaten &amp; Annahmen anpassen</summary>
+      <p class="mini" style="margin-top:8px">Leer lassen = automatisch aus Home-Assistant-Sensoren erkennen bzw. aus den
+        Messdaten schätzen. Eine Eingabe hat immer Vorrang und macht das Ergebnis belastbarer.</p>
+      <div class="grid3">
+        <div><label>Modulleistung (kWp)</label><input id="asKwp" type="number" step="0.1" placeholder="automatisch" /></div>
+        <div><label>Speicher nutzbar (kWh)</label><input id="asBat" type="number" step="0.1" placeholder="automatisch" /></div>
+        <div><label>Freier Platz für Zubau (kWp)</label><input id="asFrei" type="number" step="0.1" placeholder="unbegrenzt" /></div>
+        <div><label>Dachneigung (Grad)</label><input id="asNeigung" type="number" min="0" max="90" step="1" /></div>
+        <div><label>Ausrichtung</label>
+          <select id="asAusrichtung">
+            <option value="sued">Süd</option><option value="suedost">Südost</option><option value="suedwest">Südwest</option>
+            <option value="ost">Ost</option><option value="west">West</option><option value="nord">Nord</option>
+          </select></div>
+        <div><label>Kalkulationszins (%/Jahr)</label><input id="asZins" type="number" step="0.1" /></div>
+        <div><label>Strompreissteigerung (%/Jahr)</label><input id="asSteigerung" type="number" step="0.1" /></div>
+        <div><label>Kosten Modul-Zubau (€/kWp)</label><input id="asKostenPv" type="number" step="10" /></div>
+        <div><label>Kosten Speicher (€/kWh nutzbar)</label><input id="asKostenBat" type="number" step="10" /></div>
+      </div>
+      <div class="hint">Alle Beträge sind Endpreise (auf PV und Speicher gilt der Nullsteuersatz). Gerechnet wird
+        durchgängig nominal – Zins und Preissteigerung müssen zueinander passen.</div>
+    </details>
+  </div>
+
+  <div id="asResult"></div>
   </section>
 </main>
 

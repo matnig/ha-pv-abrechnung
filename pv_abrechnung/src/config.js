@@ -26,6 +26,16 @@ const DEFAULT_CONFIG = {
     netzpreis: 0, // €/kWh Netzbetreiber-Strompreis (Vergleich für Ersparnis; 0 = keine Ersparnis-Anzeige)
   },
   showInfoStats: true, // informative Statistik (Autarkiegrad, Ersparnis) im Bericht anzeigen
+  // Anlagen-Stammdaten für die Bewertung. Leer = wird aus HA-Sensoren erkannt bzw. geschätzt.
+  plant: {
+    kwp: null, // installierte Modulleistung
+    batteryKwh: null, // nutzbare Speicherkapazität
+    neigung: 35, // Dachneigung in Grad (für den PVGIS-Sollvergleich)
+    ausrichtung: 'sued', // sued | suedost | suedwest | ost | west | nord
+    freieFlaecheKwp: null, // wie viel Zubau das Dach hergibt (optional)
+  },
+  assess: {}, // überschriebene Annahmen der Wirtschaftlichkeitsrechnung (siehe assess/economics DEFAULTS)
+  zielAmortisation: 10, // Jahre, die eine Investition höchstens brauchen darf
   batteries: [], // optionale Akku-Ladestand-Sensoren (%) für den Status: [{ id, name, entityId }]
   batterySensor: '', // DEPRECATED (Einzel-Sensor) – wird beim Laden nach batteries migriert
   anlagenName: '', // Name der PV-Anlage (im Betreff + Bericht + CSV)
@@ -72,6 +82,8 @@ function loadConfig() {
     betreiber: cfg.betreiber || '',
     kunde: cfg.kunde || '',
     useStatistics: cfg.useStatistics !== false,
+    plant: { ...DEFAULT_CONFIG.plant, ...(cfg.plant || {}) },
+    assess: { ...(cfg.assess || {}) },
     tariffs: { ...DEFAULT_CONFIG.tariffs, ...(cfg.tariffs || {}) },
     smtp: { ...DEFAULT_CONFIG.smtp, ...(cfg.smtp || {}) },
     schedule: { ...DEFAULT_CONFIG.schedule, ...(cfg.schedule || {}) },
