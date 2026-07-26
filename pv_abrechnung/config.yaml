@@ -1,8 +1,8 @@
 # Home-Assistant-Add-on-Manifest
 name: PV Abrechnung
-version: "0.5.0"
+version: "0.5.1"
 slug: pv_abrechnung
-description: PV-Auswertung und -Abrechnung aus Zählerständen: Berichte per Mail, Störungsprotokoll, Anlagenbewertung
+description: "PV-Auswertung und -Abrechnung aus Zählerständen – Berichte per Mail, Störungsprotokoll, Anlagenbewertung"
 url: "https://github.com/matnig/ha-pv-abrechnung"
 arch:
   - amd64

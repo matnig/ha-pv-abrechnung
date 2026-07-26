@@ -2,6 +2,18 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.5.1 – 2026-07-26
+
+### Behoben: Add-on-Manifest war fehlerhaft – es erschien kein Update
+- Die Beschreibung im Manifest enthielt einen Doppelpunkt mit Leerzeichen und stand nicht in
+  Anführungszeichen. Das ist in YAML ein **Syntaxfehler**: Home Assistant konnte die
+  `config.yaml` seit Version 0.5.0 nicht mehr einlesen, und im Add-on-Store erschien deshalb
+  **kein Update** – auch nicht nach einem Neustart. Die Beschreibung steht nun in
+  Anführungszeichen, das Manifest ist wieder gültig.
+- Neue Tests sichern das Manifest ab: gültiges YAML, keine unquotierten Werte mit Doppelpunkt,
+  alle Pflichtfelder, Ingress ohne offenen Port – und die Version im Manifest muss zum neuesten
+  CHANGELOG-Eintrag passen, damit beim Update auch die richtigen Hinweise angezeigt werden.
+
 ## 0.5.0 – 2026-07-26
 
 ### Betriebsmodus: Eigenverbrauch oder Kundenlieferung
