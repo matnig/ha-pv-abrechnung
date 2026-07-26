@@ -27,7 +27,6 @@ async function loadEntities() {
     const opts = entities.map((e) => `<option value="${esc(e.entityId)}">${esc(e.name)} (${esc(e.state)} ${esc(e.unit)})</option>`).join('');
     $('mEntity').innerHTML = opts;
     $('vCompEntity').innerHTML = opts;
-    if ($('bEntity')) $('bEntity').innerHTML = opts;
     if (config) { renderVMeters(); renderDraftComponents(); renderBatteries(); } // Namen jetzt auflösbar
   } catch (e) {
     flash('Entitäten laden fehlgeschlagen: ' + e.message, false);
@@ -61,6 +60,28 @@ function delMeter(i) {
 }
 
 // ---- Akkus (nur Status/Fehlalarm-Erkennung, nicht im Bericht als Wert) ----
+// Ein Akku-Ladestand ist ein Prozentwert, kein Energiezähler – deshalb eine eigene Liste.
+let batteryEntities = [];
+async function loadBatteryEntities() {
+  const sel = $('bEntity');
+  if (!sel) return;
+  try {
+    batteryEntities = await api('api/entities/battery');
+    sel.innerHTML = batteryEntities.length
+      ? batteryEntities.map((e) => `<option value="${esc(e.entityId)}">${esc(e.name)} (${esc(e.state)} ${esc(e.unit)})</option>`).join('')
+      : '<option value="">– kein Ladestands-Sensor (%) in Home Assistant gefunden –</option>';
+    const hint = $('bHint');
+    if (hint) {
+      hint.innerHTML = batteryEntities.length
+        ? `${batteryEntities.length} Ladestands-Sensor(en) mit Einheit % gefunden.`
+        : '<span style="color:#b45309">Kein Sensor mit Einheit % und Akku-Bezug gefunden. Der Ladestand muss in Home Assistant als Prozentwert vorliegen (Geräteklasse „battery" oder ein Name mit SoC/Ladezustand/Akku).</span>';
+    }
+  } catch (e) {
+    sel.innerHTML = '<option value="">– Laden fehlgeschlagen –</option>';
+    flash('Akku-Entitäten laden fehlgeschlagen: ' + e.message, false);
+  }
+}
+
 function renderBatteries() {
   const el = $('batteries');
   if (!el) return;
@@ -74,7 +95,7 @@ function renderBatteries() {
 function addBattery() {
   const entityId = $('bEntity').value;
   if (!entityId) return flash('Keine Akku-Entität gewählt', false);
-  const ent = entities.find((e) => e.entityId === entityId);
+  const ent = batteryEntities.find((e) => e.entityId === entityId);
   config.batteries = config.batteries || [];
   config.batteries.push({ id: 'bat' + Date.now(), name: $('bName').value || (ent ? ent.name : entityId), entityId });
   $('bName').value = '';
@@ -216,6 +237,7 @@ function fillForm() {
   renderVMeters();
   renderDraftComponents();
   renderBatteries();
+  applyModusVisibility();
 }
 
 function collectForm() {
@@ -249,27 +271,85 @@ function collectForm() {
 function wizBtn(label, active, onclick) {
   return `<button class="${active ? '' : 'sec'}" style="min-width:64px" onclick="${onclick}">${label}</button>`;
 }
+// Betriebsmodus: bei Eigenverbrauch werden alle Einstellungen ausgeblendet, die nur für die
+// Abrechnung gegenüber einem Kunden gebraucht werden (Kundendaten, Lieferpreis, Grundgebühr,
+// Einspeisemanagement, Frage nach dem Vergütungsempfänger).
+function isEigenModus() {
+  return config && config.betriebsmodus === 'eigenverbrauch';
+}
+
+function applyModusVisibility() {
+  const eigen = isEigenModus();
+  document.querySelectorAll('[data-only="kunde"]').forEach((el) => {
+    el.style.display = eigen ? 'none' : '';
+  });
+  document.querySelectorAll('[data-only="eigen"]').forEach((el) => {
+    el.style.display = eigen ? '' : 'none';
+  });
+  document.querySelectorAll('[data-label-eigen]').forEach((el) => {
+    const alt = el.getAttribute('data-label-eigen');
+    const orig = el.getAttribute('data-label-kunde') || el.textContent;
+    if (!el.getAttribute('data-label-kunde')) el.setAttribute('data-label-kunde', orig);
+    el.textContent = eigen ? alt : el.getAttribute('data-label-kunde');
+  });
+  const badge = $('modusBadge');
+  if (badge) {
+    badge.textContent = eigen ? 'Modus: Eigenverbrauch (keine Kundenabrechnung)' : 'Modus: Lieferung an Kunde (mit Abrechnung)';
+    badge.style.color = eigen ? '#166534' : '#2563eb';
+  }
+}
+
 function renderWizard() {
   if (!config) return;
   config.tariffs = config.tariffs || {};
+  const eigen = isEigenModus();
   const einsp = config.tariffs.einspeisungAnBetreiber !== false;
   const info = config.showInfoStats !== false;
   $('wizard').innerHTML =
     `<div style="margin:8px 0;padding-bottom:10px;border-bottom:1px solid var(--line)">
-      <div><b>1. Bekommst DU (Anlagenbetreiber) die Einspeisevergütung vom Netzbetreiber?</b></div>
+      <div><b>1. Wofür nutzt du die Anlage?</b></div>
+      <div class="hint">Das ist die wichtigste Einstellung: sie bestimmt, ob abgerechnet wird und welche Felder du überhaupt brauchst.</div>
+      <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
+        ${wizBtn('Strom an einen Kunden liefern und abrechnen', !eigen, "wizModus('kundenlieferung')")}
+        ${wizBtn('Anlage selbst nutzen (Eigenverbrauch)', eigen, "wizModus('eigenverbrauch')")}
+      </div>
+      <div class="hint" style="margin-top:6px">${
+        eigen
+          ? '<b>Eigenverbrauch:</b> Es wird niemandem etwas in Rechnung gestellt. Der Bericht zeigt, wie viel Strombezug du eingespart hast und was die Einspeisung gebracht hat. Kundendaten und Lieferpreis sind ausgeblendet.'
+          : '<b>Lieferung an Kunde:</b> Aus Anfangs- und Endstand wird abgerechnet, der Bericht enthält den zu zahlenden Betrag und wird als Beleg im Journal eingefroren.'
+      }</div>
+    </div>
+    <div style="margin:8px 0;padding-bottom:10px;border-bottom:1px solid var(--line)" data-only="kunde">
+      <div><b>2. Bekommst DU (Anlagenbetreiber) die Einspeisevergütung vom Netzbetreiber?</b></div>
       <div class="hint">Ja = der überschüssige, ins Netz eingespeiste Strom ist deine Einnahme und taucht in der Kundenrechnung nicht auf. Nein = der Kunde bekommt die Vergütung, dann wird ihm die Einspeisemenge berechnet und dir die Einspeisemanagement-Gebühr abgezogen.</div>
       <div style="margin-top:6px;display:flex;gap:8px">${wizBtn('Ja', einsp, 'wizEinsp(true)')}${wizBtn('Nein', !einsp, 'wizEinsp(false)')}</div>
     </div>
     <div style="margin:8px 0;padding-bottom:10px;border-bottom:1px solid var(--line)">
-      <div><b>2. Soll der Bericht die Ersparnis des Kunden gegenüber Netzstrom zeigen?</b></div>
-      <div class="hint">Ja = im Bericht erscheinen Autarkiegrad (PV-Anteil) und die Ersparnis. Dafür unten bei den Tarifen den „Netzbetreiber-Strompreis" eintragen.</div>
+      <div><b>${eigen ? '2' : '3'}. Soll der Bericht ${eigen ? 'Autarkiegrad und Ersparnis' : 'die Ersparnis des Kunden gegenüber Netzstrom'} zeigen?</b></div>
+      <div class="hint">Ja = im Bericht erscheinen Autarkiegrad (PV-Anteil) und die Ersparnis. Dafür unten bei den Preisen den ${eigen ? '„eigenen Strompreis"' : '„Netzbetreiber-Strompreis"'} eintragen.</div>
       <div style="margin-top:6px;display:flex;gap:8px">${wizBtn('Ja', info, 'wizInfo(true)')}${wizBtn('Nein', !info, 'wizInfo(false)')}</div>
     </div>
     <div style="margin:8px 0">
-      <div><b>3. Zieht der Kunde auch Strom aus dem öffentlichen Netz (wenn die PV nicht reicht)?</b></div>
-      <div class="hint">Wenn ja: oben unter „Zähler" den Netzbezugs-Zähler mit Rolle <b>„Netzbezug"</b> anlegen und bei den Tarifen den Netzbezug-Preis eintragen. Nur dann lassen sich Autarkiegrad und Ersparnis berechnen.</div>
+      <div><b>${eigen ? '3' : '4'}. ${eigen ? 'Beziehst du auch Strom aus dem öffentlichen Netz?' : 'Zieht der Kunde auch Strom aus dem öffentlichen Netz (wenn die PV nicht reicht)?'}</b></div>
+      <div class="hint">Wenn ja: oben unter „Zähler" den Netzbezugs-Zähler mit Rolle <b>„Netzbezug"</b> anlegen und bei den Preisen den Strompreis eintragen. Nur dann lassen sich Autarkiegrad und Ersparnis berechnen.</div>
     </div>
     <p class="mini">Nicht vergessen: unten <b>„Speichern"</b>.</p>`;
+  applyModusVisibility();
+}
+
+async function wizModus(modus) {
+  config.betriebsmodus = modus === 'eigenverbrauch' ? 'eigenverbrauch' : 'kundenlieferung';
+  if (config.betriebsmodus === 'eigenverbrauch') {
+    // Im Eigenverbrauch gibt es keinen fremden Vergütungsempfänger und keine Gebühren.
+    config.tariffs = { ...(config.tariffs || {}), einspeisungAnBetreiber: true };
+    if ($('tEinspBetreiber')) $('tEinspBetreiber').checked = true;
+  }
+  renderWizard();
+  flash(
+    config.betriebsmodus === 'eigenverbrauch'
+      ? 'Eigenverbrauch eingestellt: keine Kundenabrechnung, nicht benötigte Felder sind ausgeblendet.'
+      : 'Kundenlieferung eingestellt: Abrechnung mit Lieferpreis und Beleg-Journal.'
+  );
 }
 function wizEinsp(v) {
   config.tariffs = config.tariffs || {};
@@ -1023,6 +1103,7 @@ async function init() {
     config = await api('api/config');
     fillForm();
     await loadEntities();
+    await loadBatteryEntities();
     await loadIncidents();
     await loadLedger();
     const startTab = (location.hash || '').replace('#', '') || 'overview';

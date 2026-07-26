@@ -49,7 +49,7 @@
   .kpi { display:inline-block; background:#f3f4f6; border-radius:6px; padding:6px 10px; margin:3px 6px 3px 0; font-size:13px; }
 </style>
 
-<header>☀️ PV Abrechnung <span id="ver" style="float:right;font-size:12px;font-weight:400;opacity:0.85"></span></header>
+<header>☀️ PV Abrechnung <span id="modusBadge" style="font-size:12px;font-weight:400;background:#fff;border-radius:6px;padding:3px 8px;margin-left:10px"></span> <span id="ver" style="float:right;font-size:12px;font-weight:400;opacity:0.85"></span></header>
 <main>
   <div id="msg" class="msg"></div>
 
@@ -87,11 +87,11 @@
 
   <div class="card">
     <h2>Stammdaten</h2>
-    <p class="mini">Erscheinen im Bericht (Kopf), im Betreff und in der CSV. Betreiber/Kunde dürfen mehrzeilig sein (Name, Anschrift).</p>
+    <p class="mini">Erscheinen im Bericht (Kopf), im Betreff und in der CSV. Mehrzeilig möglich (Name, Anschrift).</p>
     <label>Anlagenname</label><input id="anlagenName" placeholder="z.B. PV-Anlage Musterstraße 1" />
     <div class="grid3" style="margin-top:6px">
       <div><label>Betreiber (Name/Anschrift)</label><textarea id="betreiber" rows="3" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:14px;font-family:inherit" placeholder="Anlagenbetreiber…"></textarea></div>
-      <div><label>Kunde (Name/Anschrift)</label><textarea id="kunde" rows="3" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:14px;font-family:inherit" placeholder="Kunde/Mieter…"></textarea></div>
+      <div data-only="kunde"><label>Kunde (Name/Anschrift)</label><textarea id="kunde" rows="3" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:14px;font-family:inherit" placeholder="Kunde/Mieter…"></textarea></div>
     </div>
   </div>
 
@@ -104,7 +104,7 @@
       <div><label>Name</label><input id="mName" placeholder="z.B. Zähler Wohnung 1" /></div>
       <div style="max-width:170px"><label>Rolle</label>
         <select id="mRole">
-          <option value="verbrauch">Verbrauch (Partei)</option>
+          <option value="verbrauch" data-label-eigen="Eigenverbrauch">Verbrauch (Partei)</option>
           <option value="netzbezug">Netzbezug</option>
           <option value="einspeisung">Einspeisung</option>
           <option value="erzeugung">PV-Erzeugung</option>
@@ -127,10 +127,12 @@
     <p class="mini">Akku-Ladestand-Sensoren (%). Werden im <b>Dashboard</b> live angezeigt und <b>helfen, Fehlalarme zu erkennen</b>: Ist ein Akku voll/aktiv, sind flache Zähler (kein Netzbezug/keine Einspeisung) normal – kein echter Ausfall. Im Bericht erscheint nur der Hinweis, dass die Akkus überwacht werden (kein Live-Wert). Mehrere möglich.</p>
     <div id="batteries"></div>
     <div class="row" style="margin-top:10px">
-      <div><label>Akku-Entität</label><select id="bEntity"></select></div>
+      <div><label>Akku-Ladestand (%)</label><select id="bEntity"></select></div>
       <div><label>Name</label><input id="bName" placeholder="z.B. Hausspeicher" /></div>
       <div style="max-width:120px"><button onclick="addBattery()">+ Hinzufügen</button></div>
     </div>
+    <div class="hint" id="bHint">Liste zeigt Sensoren mit Einheit <b>%</b> (Ladezustand) – bewusst keine Energiezähler.
+      <a href="#" onclick="loadBatteryEntities();return false">neu laden</a></div>
   </div>
 
   <div class="card">
@@ -141,7 +143,7 @@
       <div><label>Name</label><input id="vName" placeholder="z.B. An Kunde geliefert" /></div>
       <div style="max-width:190px"><label>Rolle</label>
         <select id="vRole">
-          <option value="lieferung">Lieferung an Kunde</option>
+          <option value="lieferung" data-label-eigen="Selbst genutzte PV-Energie">Lieferung an Kunde</option>
           <option value="verbrauch">Verbrauch (Partei)</option>
           <option value="erzeugung">nur Information</option>
         </select></div>
@@ -161,36 +163,40 @@
   </div>
 
   <div class="card">
-    <h2>Tarife</h2>
-    <p class="mini">Preise in Euro pro Kilowattstunde. Verbrauch/Netzbezug werden berechnet, Einspeisung wird gutgeschrieben (abgezogen).</p>
+    <h2 data-label-eigen="Preise">Tarife</h2>
+    <p class="mini" data-only="kunde">Preise in Euro pro Kilowattstunde. Verbrauch/Netzbezug werden berechnet, Einspeisung wird gutgeschrieben (abgezogen).</p>
+    <p class="mini" data-only="eigen">Im Eigenverbrauch wird nichts abgerechnet. Gebraucht werden nur zwei Preise: dein <b>eigener Strompreis</b> (womit die selbst genutzte kWh bewertet wird) und die <b>Einspeisevergütung</b>.</p>
     <div class="grid3">
-      <div>
+      <div data-only="kunde">
         <label>Verbrauch €/kWh</label><input id="tVerbrauch" type="number" step="0.001" />
         <div class="hint">Preis, den eine Partei je kWh bezahlt (an sie gelieferter PV-/Reststrom).</div>
       </div>
-      <div>
+      <div data-only="kunde">
         <label>Lieferung €/kWh</label><input id="tLieferung" type="number" step="0.001" />
         <div class="hint">Preis je kWh für „an Kunde geliefert" (virtueller Zähler = Erzeugung − Einspeisung).</div>
       </div>
       <div>
-        <label>Netzbezug €/kWh</label><input id="tNetzbezug" type="number" step="0.001" />
-        <div class="hint">Preis je kWh, die der Kunde aus dem öffentlichen Netz bezogen hat (Netzbezugs-Zähler).</div>
+        <label data-label-eigen="Strompreis Netzbezug €/kWh">Netzbezug €/kWh</label><input id="tNetzbezug" type="number" step="0.001" />
+        <div class="hint" data-only="kunde">Preis je kWh, die der Kunde aus dem öffentlichen Netz bezogen hat (Netzbezugs-Zähler).</div>
+        <div class="hint" data-only="eigen">Was du selbst je kWh aus dem Netz bezahlst.</div>
       </div>
       <div>
-        <label>Netzbetreiber-Strompreis €/kWh</label><input id="tNetzpreis" type="number" step="0.001" />
-        <div class="hint">Nur für die <b>Ersparnis-Anzeige</b>: Preis, den der Kunde beim Netzbetreiber zahlen würde. Die Ersparnis = (dieser Preis − Lieferpreis) × gelieferte PV-kWh. 0 = keine Ersparnis-Anzeige.</div>
+        <label data-label-eigen="Eigener Strompreis €/kWh">Netzbetreiber-Strompreis €/kWh</label><input id="tNetzpreis" type="number" step="0.001" />
+        <div class="hint" data-only="kunde">Nur für die <b>Ersparnis-Anzeige</b>: Preis, den der Kunde beim Netzbetreiber zahlen würde. Die Ersparnis = (dieser Preis − Lieferpreis) × gelieferte PV-kWh. 0 = keine Ersparnis-Anzeige.</div>
+        <div class="hint" data-only="eigen"><b>Wichtigster Wert im Eigenverbrauch:</b> was du beim Versorger je kWh zahlst. Damit wird jede selbst genutzte kWh bewertet – im Bericht und in der Anlagenbewertung.</div>
       </div>
       <div>
         <label>Einspeisung €/kWh</label><input id="tEinspeisung" type="number" step="0.001" />
-        <div class="hint">Satz je ins Netz eingespeister kWh. <b>Nur relevant, wenn der Kunde die Vergütung bekommt</b> (siehe unten): dann zahlt der Kunde dir diesen Satz je eingespeister kWh.</div>
+        <div class="hint" data-only="kunde">Satz je ins Netz eingespeister kWh. <b>Nur relevant, wenn der Kunde die Vergütung bekommt</b> (siehe unten): dann zahlt der Kunde dir diesen Satz je eingespeister kWh.</div>
+        <div class="hint" data-only="eigen">Deine Einspeisevergütung je kWh. Damit wird der eingespeiste Überschuss im Bericht als Ertrag ausgewiesen.</div>
       </div>
-      <div>
+      <div data-only="kunde">
         <label>Grundgebühr €/Periode</label><input id="tGrund" type="number" step="0.01" />
         <div class="hint">Fester Betrag je Abrechnungszeitraum (z.B. Zähler-/Verwaltungspauschale).</div>
       </div>
     </div>
 
-    <div class="legend" style="margin-top:14px">
+    <div class="legend" style="margin-top:14px" data-only="kunde">
       <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--text)">
         <input type="checkbox" id="tEinspBetreiber" style="width:auto;margin-top:2px" />
         <span><b>Anlagenbetreiber erhält die Einspeisevergütung vom Netz</b></span>
@@ -344,7 +350,7 @@
 
   <section id="tab-abrechnung" class="tab">
   <div class="card">
-    <h2>Rechnungsjournal (manipulationssicher)</h2>
+    <h2 data-label-eigen="Beleg-Journal (manipulationssicher)">Rechnungsjournal (manipulationssicher)</h2>
     <p class="mini">Jeder versendete Bericht wird als Beleg mit Prüfsumme gespeichert (Hash-Kette). Wird ein alter Beleg nachträglich verändert, bricht die Kette und es wird hier angezeigt.</p>
     <div id="ledger" class="mini">–</div>
   </div>

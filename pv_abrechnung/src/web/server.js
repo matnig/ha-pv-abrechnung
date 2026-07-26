@@ -67,6 +67,16 @@ function createServer() {
     }
   });
 
+  // Akku-Ladestände (%) – eigene Liste, da ein Ladestand kein Energiezähler ist.
+  app.get('/api/entities/battery', async (req, res) => {
+    try {
+      res.json(await haClient.listBatteryEntities());
+    } catch (err) {
+      console.error('[api/entities/battery]', err && err.message ? err.message : err);
+      res.status(502).json({ error: 'Akku-Entitäten von HA konnten nicht geladen werden: ' + String(err.message || err) });
+    }
+  });
+
   app.get('/api/status', (req, res) => {
     const snap = loadSnapshots();
     const config = loadConfig();

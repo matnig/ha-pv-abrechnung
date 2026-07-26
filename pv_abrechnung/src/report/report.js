@@ -25,12 +25,18 @@ const ANOMALY_TEXT = {
   error: 'Lesefehler',
 };
 
+function isEigen(billing) {
+  return (billing.totals && billing.totals.modus) === 'eigenverbrauch';
+}
+
 function subject(billing) {
   const p = billing.period;
   const label = { day: 'Tagesbericht', week: 'Wochenbericht', month: 'Monatsbericht', year: 'Jahresbericht' }[p.type] || 'Bericht';
   const incomplete = p.end.getTime() > (billing.generatedAt || Date.now());
   const anlage = billing.stammdaten && billing.stammdaten.anlagenName ? ' ' + billing.stammdaten.anlagenName : '';
-  return `PV-Abrechnung${anlage} – ${label} ${p.label}${incomplete ? ' (nicht abgeschlossen)' : ''}`;
+  // Ohne Kundenabrechnung ist es kein Abrechnungs-, sondern ein Anlagenbericht.
+  const prefix = isEigen(billing) ? 'PV-Anlage' : 'PV-Abrechnung';
+  return `${prefix}${anlage} – ${label} ${p.label}${incomplete ? ' (nicht abgeschlossen)' : ''}`;
 }
 
 function monthlyPrimaryKwh(m) {
@@ -87,13 +93,14 @@ const priceStr = (v) => Number(v || 0).toLocaleString('de-DE', { minimumFraction
 function buildInfoStats(billing) {
   if (!billing.showInfoStats) return '';
   const t = billing.totals;
+  const eigen = isEigen(billing);
   const parts = [];
   if (t.gesamtKwh > 0 && t.autarkie != null) {
     const pv = t.autarkie;
     const netz = 100 - pv;
     parts.push(`
       <div style="margin-top:8px">
-        <div style="font-size:14px">Autarkiegrad: <b>${pv}%</b> des Verbrauchs kam aus der PV-Anlage.</div>
+        <div style="font-size:14px">Autarkiegrad: <b>${pv}%</b> des ${eigen ? 'eigenen Verbrauchs' : 'Verbrauchs'} kam aus der PV-Anlage.</div>
         <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;margin-top:6px;font-size:11px;color:#fff;table-layout:fixed">
           <tr>
             <td width="${pv}%" height="22" align="center" style="background:#16a34a;line-height:22px">${pv > 12 ? 'PV ' + pv + '%' : ''}</td>
@@ -104,8 +111,13 @@ function buildInfoStats(billing) {
       </div>`);
   }
   if (t.ersparnis > 0) {
-    parts.push(`<div style="margin-top:10px;font-size:14px;color:#166534">💡 Ersparnis für den Kunden: <b>${eur(t.ersparnis)}</b> gegenüber Netzstrom
-      (PV ${priceStr(t.lieferpreis)} statt Netz ${priceStr(t.netzpreis)} · ${kwh(t.pvKwh)}).</div>`);
+    parts.push(
+      eigen
+        ? `<div style="margin-top:10px;font-size:14px;color:#166534">💡 Eingesparter Strombezug: <b>${eur(t.ersparnis)}</b>
+      (${kwh(t.pvKwh)} selbst genutzt, bewertet mit ${priceStr(t.eigenStrompreis || t.netzpreis)}).</div>`
+        : `<div style="margin-top:10px;font-size:14px;color:#166534">💡 Ersparnis für den Kunden: <b>${eur(t.ersparnis)}</b> gegenüber Netzstrom
+      (PV ${priceStr(t.lieferpreis)} statt Netz ${priceStr(t.netzpreis)} · ${kwh(t.pvKwh)}).</div>`
+    );
   }
   if (billing.batteries && billing.batteries.length) {
     const names = billing.batteries.map((b) => esc(b.name || b.entityId)).join(', ');
@@ -120,6 +132,16 @@ function buildInfoStats(billing) {
 function buildPriceTransparency(billing) {
   const tf = billing.tariffs;
   if (!tf) return '';
+  const eigen = isEigen(billing);
+  const t = billing.totals || {};
+  if (eigen) {
+    const rows = [['Eigener Strompreis (Vergleichswert)', priceStr(t.eigenStrompreis || tf.netzpreis || tf.netzbezug)]];
+    if (Number(tf.einspeisung)) rows.push(['Einspeisevergütung', priceStr(tf.einspeisung)]);
+    const trs = rows.map(([k, v]) => `<tr><td style="padding:3px 8px;color:#555">${esc(k)}</td><td style="padding:3px 8px;text-align:right">${esc(v)}</td></tr>`).join('');
+    return `<h3 style="margin-top:24px">Preise (Transparenz)</h3>
+      <table style="border-collapse:collapse;font-size:13px">${trs}</table>
+      <div style="font-size:13px;color:#555;margin-top:6px">Die Anlage wird selbst genutzt – es wird nichts abgerechnet. Der selbst verbrauchte Strom ist mit dem Preis bewertet, den er beim Versorger gekostet hätte; die Einspeisevergütung erhält der Anlagenbetreiber.</div>`;
+  }
   const rows = [['Preis Lieferung (PV an Kunde)', priceStr(tf.lieferung)]];
   if (Number(tf.netzbezug)) rows.push(['Preis Netzbezug', priceStr(tf.netzbezug)]);
   if (Number(tf.netzpreis)) rows.push(['Netzbetreiber-Strompreis (Vergleich)', priceStr(tf.netzpreis)]);
@@ -137,6 +159,7 @@ function buildPriceTransparency(billing) {
 function buildHtml(billing) {
   const p = billing.period;
   const t = billing.totals;
+  const eigen = isEigen(billing);
   const sd = billing.stammdaten || {};
   const incomplete = p.end.getTime() > (billing.generatedAt || Date.now());
   const periodWord = { day: 'Tag', week: 'Woche', month: 'Monat', year: 'Jahr' }[p.type] || 'Zeitraum';
@@ -207,7 +230,7 @@ function buildHtml(billing) {
       : '');
 
   return `<!doctype html><html><body style="font-family:system-ui,Arial,sans-serif;color:#222;max-width:820px">
-    <h2 style="margin-bottom:2px">PV-Abrechnung</h2>
+    <h2 style="margin-bottom:2px">${eigen ? 'PV-Anlagenbericht' : 'PV-Abrechnung'}</h2>
     ${sd.anlagenName ? `<div style="font-size:15px;color:#333;margin-bottom:6px">Anlage: <b>${esc(sd.anlagenName)}</b></div>` : ''}
     ${incompleteBanner}
     ${banner}
@@ -215,10 +238,10 @@ function buildHtml(billing) {
       new Date(p.end.getTime() - 1)
     )})${incomplete ? ' <span style="color:#dc2626;font-weight:600">· vorläufig, nicht abgeschlossen</span>' : ''}</div>
     ${
-      sd.betreiber || sd.kunde
+      (sd.betreiber || (sd.kunde && !eigen))
         ? `<table style="margin-top:12px;font-size:13px;border-collapse:collapse"><tr>
              <td style="vertical-align:top;padding-right:32px"><div style="color:#888">Betreiber</div>${esc(sd.betreiber).replace(/\n/g, '<br>') || '–'}</td>
-             <td style="vertical-align:top"><div style="color:#888">Kunde</div>${esc(sd.kunde).replace(/\n/g, '<br>') || '–'}</td>
+             ${eigen ? '' : `<td style="vertical-align:top"><div style="color:#888">Kunde</div>${esc(sd.kunde).replace(/\n/g, '<br>') || '–'}</td>`}
            </tr></table>`
         : ''
     }
@@ -230,17 +253,27 @@ function buildHtml(billing) {
       <thead><tr style="background:#f3f4f6;text-align:left">
         <th style="padding:6px">Zähler</th><th>Rolle</th>
         <th style="text-align:right">Anfangsstand</th><th style="text-align:right">Endstand</th>
-        <th style="text-align:right">Menge</th><th style="text-align:right">Tarif</th><th style="text-align:right">Betrag</th>
+        <th style="text-align:right">Menge</th><th style="text-align:right">Preis</th><th style="text-align:right">${eigen ? 'Wert' : 'Betrag'}</th>
       </tr></thead>
       <tbody>${rows || '<tr><td colspan="7" style="padding:10px;color:#888">Keine Zähler konfiguriert.</td></tr>'}</tbody>
     </table>
-    <table style="margin-top:16px;font-size:15px">
+    ${
+      eigen
+        ? `<table style="margin-top:16px;font-size:15px">
+             <tr><td>Eingesparter Strombezug (selbst genutzte PV-Energie)</td><td style="text-align:right;padding-left:24px">${eur(t.ersparnisEigenverbrauch)}</td></tr>
+             ${t.einspeiseErtrag ? `<tr><td>Einspeisevergütung</td><td style="text-align:right;padding-left:24px">${eur(t.einspeiseErtrag)}</td></tr>` : ''}
+             <tr><td style="font-size:17px"><b>Nutzen der Anlage im Zeitraum</b></td><td style="text-align:right;padding-left:24px;font-size:17px"><b>${eur(t.total)}</b></td></tr>
+             ${t.netzkosten ? `<tr><td style="color:#666">Zum Vergleich: verbleibende Stromkosten aus dem Netz</td><td style="text-align:right;padding-left:24px;color:#666">${eur(t.netzkosten)}</td></tr>` : ''}
+           </table>
+           <div style="font-size:12px;color:#666;margin-top:4px">Eigenverbrauch: es wird nichts in Rechnung gestellt. Der selbst genutzte Strom ist mit ${priceStr(t.eigenStrompreis)} bewertet – das ist der Preis, den er beim Versorger gekostet hätte.</div>`
+        : `<table style="margin-top:16px;font-size:15px">
       ${t.grundgebuehr ? `<tr><td>Grundgebühr</td><td style="text-align:right;padding-left:24px">${eur(t.grundgebuehr)}</td></tr>` : ''}
       ${t.einspeiseManagement ? `<tr><td>Einspeisemanagement (anteilig, dem Betreiber abgezogen)</td><td style="text-align:right;padding-left:24px">−${eur(t.einspeiseManagement)}</td></tr>` : ''}
       <tr><td style="font-size:17px"><b>Summe</b></td><td style="text-align:right;padding-left:24px;font-size:17px"><b>${eur(
         t.total
       )}</b></td></tr>
-    </table>
+    </table>`
+    }
     ${buildMeterChart(billing)}
     ${buildReportCharts(billing.chart)}
     ${buildInfoStats(billing)}

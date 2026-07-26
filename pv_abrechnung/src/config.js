@@ -8,6 +8,11 @@ function options() {
 }
 
 const DEFAULT_CONFIG = {
+  // Betriebsmodus der Anlage:
+  //   'kundenlieferung' – der Strom wird an eine andere Partei geliefert und abgerechnet
+  //   'eigenverbrauch'  – die Anlage wird selbst genutzt; es gibt keine Kundenrechnung,
+  //                       der Bericht zeigt Ersparnis und Einspeiseertrag statt eines Betrags
+  betriebsmodus: 'kundenlieferung',
   meters: [
     // { id, name, entityId, role }
     // role: 'erzeugung' | 'einspeisung' | 'netzbezug' | 'verbrauch'
@@ -78,6 +83,7 @@ function loadConfig() {
   return {
     ...DEFAULT_CONFIG,
     ...cfg,
+    betriebsmodus: cfg.betriebsmodus === 'eigenverbrauch' ? 'eigenverbrauch' : 'kundenlieferung',
     batteries,
     virtualMeters: cfg.virtualMeters || [],
     alertRecipients: cfg.alertRecipients || [],

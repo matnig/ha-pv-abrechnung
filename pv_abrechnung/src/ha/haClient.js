@@ -84,6 +84,36 @@ async function listAllStates() {
   return all;
 }
 
+/**
+ * Kandidaten für Akku-Ladestände: Einheit % mit device_class „battery" ODER einem Namen, der
+ * auf einen Ladezustand hinweist. Ein Akku-Ladestand ist KEIN Energiezähler – deshalb eine
+ * eigene Liste (die Energieliste enthält nur Wh/kWh/MWh).
+ */
+function filterBatteryEntities(all) {
+  const hint = /(soc|state[_-]?of[_-]?charge|ladezustand|ladestand|batter|akku|speicher|storage|bms)/i;
+  return (all || [])
+    .filter((s) => {
+      const a = s.attributes || {};
+      if (String(a.unit_of_measurement || '').trim() !== '%') return false;
+      return a.device_class === 'battery' || hint.test(s.entity_id || '') || hint.test(String(a.friendly_name || ''));
+    })
+    .map((s) => {
+      const a = s.attributes || {};
+      return {
+        entityId: s.entity_id,
+        name: a.friendly_name || s.entity_id,
+        unit: a.unit_of_measurement || '%',
+        deviceClass: a.device_class || null,
+        state: s.state,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function listBatteryEntities() {
+  return filterBatteryEntities(await listAllStates());
+}
+
 /** HA-Kerneinstellungen – u.a. Standort (latitude/longitude/elevation) und Zeitzone. */
 async function getHaConfig() {
   const res = await authedFetch(`${httpBase()}/config`);
@@ -172,6 +202,8 @@ function statisticsDuringPeriod(statisticIds, startISO, endISO, period = 'day') 
 module.exports = {
   getState,
   listEnergyEntities,
+  listBatteryEntities,
+  filterBatteryEntities,
   listAllStates,
   getHaConfig,
   statisticsDuringPeriod,

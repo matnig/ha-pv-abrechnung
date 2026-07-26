@@ -100,14 +100,22 @@ async function runAssessment(config, ha, opts = {}) {
   const gen = profile.series.erzeugung;
   const con = profile.series.verbrauch;
   const istSim = simulate({ generation: gen, consumption: con, batteryKwh, roundTrip: rt, standbyWatt: batteryKwh ? annahmen.batterieStandbyWatt : 0 });
+  // Im Eigenverbrauchsmodus ist eine selbst genutzte kWh den eigenen Strompreis wert
+  // (vermiedener Bezug) – es gibt keinen Lieferpreis.
+  const eigenModus = config.betriebsmodus === 'eigenverbrauch';
+  const tf = config.tariffs || {};
   const preise = {
-    lieferung: Number((config.tariffs || {}).lieferung) || 0,
-    einspeisung: Number((config.tariffs || {}).einspeisung) || 0,
-    netzbezug: Number((config.tariffs || {}).netzbezug) || 0,
-    einspeisungAnBetreiber: (config.tariffs || {}).einspeisungAnBetreiber !== false,
+    lieferung: eigenModus ? Number(tf.netzpreis || tf.netzbezug) || 0 : Number(tf.lieferung) || 0,
+    einspeisung: Number(tf.einspeisung) || 0,
+    netzbezug: Number(tf.netzbezug || tf.netzpreis) || 0,
+    einspeisungAnBetreiber: eigenModus ? true : tf.einspeisungAnBetreiber !== false,
   };
   if (!preise.lieferung) {
-    dataGaps.push({ was: 'Lieferpreis (€/kWh) für den an den Kunden gelieferten Strom', warum: 'Ohne Lieferpreis kann der wirtschaftliche Nutzen zusätzlicher PV-Energie nicht berechnet werden.', feld: 'tariffs.lieferung' });
+    dataGaps.push(
+      eigenModus
+        ? { was: 'Eigener Strompreis (€/kWh)', warum: 'Ohne ihn ist nicht berechenbar, was eine selbst genutzte kWh wert ist (vermiedener Strombezug).', feld: 'tariffs.netzpreis' }
+        : { was: 'Lieferpreis (€/kWh) für den an den Kunden gelieferten Strom', warum: 'Ohne Lieferpreis kann der wirtschaftliche Nutzen zusätzlicher PV-Energie nicht berechnet werden.', feld: 'tariffs.lieferung' }
+    );
   }
   const istErloes = revenue(istSim, preise);
   const yf = cov.yearFactor || 1;
@@ -293,7 +301,7 @@ async function runAssessment(config, ha, opts = {}) {
   // --- 6. Hebel ohne Investition ---
   const hebel = [];
   const einspeisungAnteil = istSim.generation > 0 ? round((istSim.einspeisung / istSim.generation) * 100, 0) : 0;
-  if (preise.lieferung && preise.einspeisung && preise.lieferung < preise.einspeisung) {
+  if (!eigenModus && preise.lieferung && preise.einspeisung && preise.lieferung < preise.einspeisung) {
     hebel.push({
       thema: 'Lieferpreis unter Einspeisevergütung',
       text: `Der Lieferpreis (${preise.lieferung} €/kWh) liegt unter der Einspeisevergütung (${preise.einspeisung} €/kWh). Jede an den Kunden gelieferte kWh bringt damit weniger als die Einspeisung – wirtschaftlich wäre die Einspeisung. Das ist meist ein Zeichen für einen zu niedrig angesetzten Lieferpreis.`,
@@ -303,11 +311,14 @@ async function runAssessment(config, ha, opts = {}) {
   if (einspeisungAnteil >= 50) {
     hebel.push({
       thema: 'Hoher Einspeiseanteil',
-      text: `${einspeisungAnteil}% der Erzeugung gehen ins Netz und bringen nur ${preise.einspeisung || 0} €/kWh statt ${preise.lieferung || 0} €/kWh. Jede kWh, die stattdessen beim Kunden landet, bringt ${round((preise.lieferung || 0) - (preise.einspeisung || 0), 3)} €/kWh mehr – Ansatzpunkte: Speicher, Lastverschiebung beim Kunden (Wärmepumpe/Wallbox/Maschinen tagsüber), zusätzliche Abnehmer.`,
+      text:
+        `${einspeisungAnteil}% der Erzeugung gehen ins Netz und bringen nur ${preise.einspeisung || 0} €/kWh statt ${preise.lieferung || 0} €/kWh. ` +
+        `Jede kWh, die stattdessen ${eigenModus ? 'selbst verbraucht' : 'beim Kunden'} wird, bringt ${round((preise.lieferung || 0) - (preise.einspeisung || 0), 3)} €/kWh mehr – ` +
+        `Ansatzpunkte: Speicher, Lastverschiebung (Wärmepumpe/Wallbox/Maschinen tagsüber)${eigenModus ? '' : ', zusätzliche Abnehmer'}.`,
       wirkung: 'Grundlage der Speicher-Bewertung',
     });
   }
-  if (preise.lieferung) {
+  if (preise.lieferung && !eigenModus) {
     const plus1ct = round(istSim.eigenverbrauch * yf * 0.01, 0);
     const guenstigste = variants.length ? variants.reduce((b, v) => (v.invest < b.invest ? v : b), variants[0]) : null;
     hebel.push({
@@ -398,6 +409,7 @@ async function runAssessment(config, ha, opts = {}) {
   return {
     ok: true,
     zielAmortisation: zielJahre,
+    betriebsmodus: eigenModus ? 'eigenverbrauch' : 'kundenlieferung',
     annahmen,
     eegSaetze: { gueltigBis: eeg.TARIFFS.gueltigBis, quelle: eeg.TARIFFS.quelle },
     rechtHinweise,
