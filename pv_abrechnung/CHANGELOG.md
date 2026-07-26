@@ -2,6 +2,164 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.5.0 – 2026-07-26
+
+### Betriebsmodus: Eigenverbrauch oder Kundenlieferung
+- Erste Frage der Einrichtungshilfe: **„Strom an einen Kunden liefern und abrechnen"** oder
+  **„Anlage selbst nutzen (Eigenverbrauch)"**.
+- Im Eigenverbrauch wird **nichts in Rechnung gestellt**. Der Bericht weist stattdessen den
+  eingesparten Strombezug (selbst genutzte kWh × eigener Strompreis) und den Einspeiseertrag
+  aus, zusammengefasst als **„Nutzen der Anlage im Zeitraum"**; die verbleibenden Netzkosten
+  stehen als Vergleich daneben. Betreff wird „PV-Anlagenbericht", Kundendaten werden nicht
+  gedruckt.
+- Ausgeblendet werden alle Felder, die nur die Kundenabrechnung betreffen: Kundendaten,
+  Lieferpreis, Verbrauchspreis, Grundgebühr, Einspeisemanagement und die Frage nach dem
+  Empfänger der Einspeisevergütung. Der „Netzbetreiber-Strompreis" heißt hier
+  **„Eigener Strompreis"** und ist der zentrale Wert.
+- Die Anlagenbewertung bewertet eine selbst genutzte kWh mit dem eigenen Strompreis
+  (vermiedener Bezug); die kundenspezifischen Hebel entfallen.
+- Bestandskonfigurationen bleiben im Abrechnungsmodus (Standard).
+
+### Behoben: Akku-Auswahl zeigte nur Energiezähler
+- Ein Akku-Ladestand ist ein **Prozentwert**, das Auswahlfeld wurde aber mit der
+  Energie-Entitätsliste (Wh/kWh/MWh) gefüllt – es konnte also gar kein passender Sensor
+  erscheinen.
+- Neu: eigene Liste mit Sensoren der Einheit **%** und Geräteklasse „battery" bzw. einem Namen
+  mit SoC/Ladezustand/Akku/Speicher. Energiezähler und fremde Prozentwerte (z. B. Luftfeuchte)
+  sind ausgeschlossen. Findet sich kein Sensor, erklärt die Oberfläche, was benötigt wird.
+
+## 0.4.2 – 2026-07-25
+
+### Incident-Report: manueller Export über einen Zeitraum
+- Neuer Bereich mit **Datum- und Uhrzeit-Auswahl** samt Schnellwahl (Heute, Gestern,
+  Letzte 7 Tage, Dieser Monat, Letzter Monat) und Live-Vorschau, wie viele Auffälligkeiten im
+  gewählten Zeitraum liegen.
+- Export als **CSV-Download** (Semikolon, UTF-8 mit BOM für Excel; enthält Bewertung, Prüfer,
+  Bewertungszeit und Report-Dokumentation) oder als **Mail**.
+- Der manuelle Export enthält **alle** Auffälligkeiten des Zeitraums und markiert nichts als
+  versendet – der automatische Versand bleibt weiterhin rein inkrementell.
+- Manuelle Exporte erscheinen im Protokoll mit Kennzeichnung und Zeitraum.
+
+## 0.4.1 – 2026-07-25
+
+### Anlagendaten vollständig in der Oberfläche eingebbar – und wirksam
+- **Inbetriebnahme** (Jahr oder Jahr-Monat): berechnet Anlagenalter, altersübliche Degradation
+  und die Restlaufzeit der 20-jährigen EEG-Vergütung. Läuft sie in fünf Jahren oder weniger
+  aus, erscheint ein Planungshinweis.
+- **Wechselrichter-Nennleistung**: deckelt die Erzeugung jeder Zubau-Variante stundengenau; die
+  dadurch verlorene Energie wird je Variante ausgewiesen.
+- **Freier Platz für Zubau (kWp)**: begrenzt die vorgeschlagenen Varianten; die maximale
+  Dachbelegung wird als eigene Variante ergänzt.
+- **Wärmepumpe / Wallbox**: erzeugt den Hebel „Lastverschiebung" – wirkt wie ein Speicher, aber
+  ohne Investition, und wird ausdrücklich vor einer Speicher-Investition empfohlen.
+
+## 0.4.0 – 2026-07-25
+
+### Neuer Bereich „Bewertung"
+Bewertet die Anlage auf Grundlage der **echten Stundendaten** aus der Langzeitstatistik – keine
+Faustformeln, keine Standardlastprofile.
+
+- **Grenzbetrachtung statt Durchschnitt**: Jede Variante wird stündlich über ein Jahr simuliert
+  und gegen den Ist-Zustand differenziert. Eine zusätzliche kWh wird dort verbucht, wo sie real
+  landet – beim Verbraucher (voller Preis) oder im Netz (Einspeisevergütung).
+- **Zustand der Anlage**: spezifischer Ertrag gegen den Standort-Sollwert (PVGIS der
+  EU-Kommission, Koordinaten automatisch aus Home Assistant), Verschattungsmuster, mögliche
+  Wechselrichter-Begrenzung, ertragslose Tage, Speichernutzung.
+- **Leistungsentwicklung**: erkennt nachlassende Leistung über die Zeit – gegen das
+  Klimamittel des Standorts und gegen denselben Monat des Vorjahres. Ein einzelner schwacher
+  Monat gilt als Wetter; gemeldet wird erst bei mehreren Monaten in Folge. Schleichende
+  Rückgänge werden als Trend ausgewiesen.
+- **Erweiterungen**: Modul- und Speicherzubau in Stufen und Kombinationen, mit Investition,
+  Mehrerlös, Amortisation (statisch und dynamisch), Kapitalwert und Rendite. Eine gewünschte
+  Amortisationszeit kann vorgegeben werden.
+- **Ersatzinvestitionen** (Wechselrichter, Batterie) sind eingerechnet; wo sie anfallen, wird
+  keine Rendite ausgewiesen, weil sie dann mathematisch nicht eindeutig ist.
+- **Vergütung des Zubaus** mit dem heute gültigen Satz statt dem der Bestandsanlage, anteilig
+  gewichtet über die Leistungsklassen, mit Abschlag für Stunden mit negativem Börsenpreis.
+- **Hebel ohne Investition** und **rechtliche Hinweise** (getrennte Messung, Schwellen,
+  Umsatzsteuer).
+- Fehlende Angaben werden ausdrücklich benannt statt geschätzt.
+
+## 0.3.1 – 2026-07-25
+
+### Behoben: Diagramme im Bericht waren unsichtbar
+- **Rendering**: Die Balken waren als verschachtelte Tabellen mit Höhenattributen auf leeren
+  Zellen gebaut – solche Zellen werden von Mail-Programmen auf Höhe 0 reduziert. Jetzt feste
+  Pixelhöhen; `opacity` (von Outlook ignoriert) ersetzt durch echte, aufgehellte Farben.
+- **Werte**: Bei einem Rücksprung auf 0 wurde der Bezugswert mitgesenkt, wodurch der nächste
+  echte Wert als riesiger Zuwachs zählte. Ein einziger solcher Ausreißer skalierte die Achse so,
+  dass alle echten Werte nur ein Pixel hoch waren. Jetzt wird der Stand gehalten – die
+  Diagramm-Summen stimmen wieder mit den Abrechnungsmengen überein, auch die Sonnenstunden.
+- Zählertabelle im Bericht lief rechts über (abgeschnittene Beträge) – jetzt feste Spaltenbreiten.
+
+## 0.3.0 – 2026-07-25
+
+### Verlaufsdiagramme in allen Berichten
+- Jede Bericht-Mail enthält den Verlauf je Rolle mit Vergleich zur Vorperiode: Tag → Stunden,
+  Woche → Wochentage, Monat → Tage, Jahr → Monate, dazu die Sonnenstunden.
+- Beschriftete Y-Achse mit lesbaren Stufen und automatischer Einheit (Wh / kWh / MWh).
+- Bewusst nur Tabellen und Inline-Styles, damit die Diagramme auch in restriktiven
+  Mail-Programmen sichtbar sind.
+- Die Diagrammdaten werden im Beleg eingefroren, damit versendete Berichte reproduzierbar bleiben.
+
+### Wochenberichte
+- Kalenderwoche (Montag bis Sonntag) mit Wochennummer, Versand montags für die Vorwoche,
+  Auswahl „Vorwoche/Aktuelle Woche" und ein eigener Schalter im Zeitplan.
+
+### Behoben: Fehlalarm „Zähler steht still"
+- Ursache: Home Assistant setzt `last_updated` nur bei einer **Wertänderung**. Ein Zähler, der
+  still steht, weil die Anlage einspeist, sah damit wie ein Sensorausfall aus.
+- Jetzt ist `last_reported` maßgeblich – das wird bei jedem Melden gesetzt, auch bei
+  unverändertem Wert. Zusätzlich wird kein Alarm ausgelöst, wenn zeitgleich ein anderer Zähler
+  hochzählt. Und ein Stillstand wird pro Phase nur einmal gemeldet statt bei jedem Abruf.
+
+## 0.2.1 – 2026-07-25
+
+### Incident-Report versendet nur Neues
+- Beim Absenden werden nur die bewerteten Auffälligkeiten dokumentiert, die in der letzten Mail
+  noch nicht dabei waren. Die Markierung erfolgt erst **nach** erfolgreichem Versand – schlägt
+  er fehl, sind die Einträge beim nächsten Versuch wieder dabei.
+- Das Archiv zeigt je Eintrag, ob und wann er dokumentiert wurde.
+
+## 0.2.0 – 2026-07-25
+
+### Oberfläche in Bereiche gegliedert
+- Neue Navigation: **Übersicht, Einstellungen, Berichte, Incident Report, Abrechnung**.
+- **Übersicht als Startseite**: Statuszeile (Zähler, offene Störungen, unbewertete
+  Auffälligkeiten, Akku-Ladestände) und ein Diagramm „Heute & gestern" mit stündlicher Energie
+  je Rolle, Sonnenstunden, beschrifteter Achse und Werten in passender Einheit beim Überfahren
+  mit der Maus.
+
+### Auffälligkeiten sind nach der Bewertung unveränderlich
+- Einmal bewertet, lässt sich ein Eintrag nicht mehr ändern; er wandert in ein Archiv, das über
+  einen Knopf eingeblendet wird.
+
+## 0.1.29 – 2026-07-25
+
+### Akkus als eigener Abschnitt
+- Der Akku-Ladestand ist aus den Stammdaten in einen eigenen Abschnitt unter „Zähler" gewandert.
+  **Mehrere Akkus** sind möglich, Auswahl aus einer Liste. Alte Einzel-Einstellungen werden
+  automatisch übernommen.
+- Im Bericht erscheint nur der Hinweis, dass die Akkus überwacht werden – kein Momentanwert mehr.
+
+### Auffälligkeiten kontrollieren und dokumentieren
+- Jede Auffälligkeit kann mit einem Text versehen und als **kritisch** oder **unkritisch**
+  eingestuft werden. Festgehalten wird, welcher Home-Assistant-Benutzer die Bewertung wann
+  vorgenommen hat.
+- Die Bewertungen erscheinen im Berichtsprotokoll und werden im Beleg eingefroren.
+- „Incident-Report absenden" verschickt eine Dokumentations-Mail über die bewerteten
+  Auffälligkeiten.
+
+## 0.1.28 – 2026-07-25
+
+### Sicherheitshärtung
+- **Cross-Site-Scripting in der Oberfläche behoben**: Namen und Zustände aus Home Assistant
+  wurden ungeprüft in die Seite geschrieben. Jetzt werden alle fremden Werte maskiert.
+- Auch die Störungsmails maskieren den Zählernamen.
+- **Abhängigkeiten aktualisiert**: nodemailer auf 9.x (behebt Schwachstellen bei
+  Header-Verarbeitung und Zertifikatsprüfung), node-cron auf 4.x. Ergebnis: keine bekannten
+  Schwachstellen mehr.
+
 ## 0.1.27 – 2026-07-24
 
 ### Akku-Ladestand + Ausfall-Benachrichtigung
@@ -124,7 +282,7 @@ Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
   genutzt (mit Hinweis „Anfangsstand ab erstem verfügbaren Datum …"). Gilt für echte UND virtuelle Zähler.
 - **Bericht-Statistik glitch-sicher:** Auch der Bericht nutzt jetzt den monotonen Zählerstand
   (`state`) statt der bei 0-Aussetzern aufgeblähten `sum` – die Mengen stimmen jetzt auch bei
-  Zählern mit kurzen 0-Aussetzern (z.B. Tasmota).
+  Zählern mit kurzen 0-Aussetzern.
 - **Zeitraum-Auswahl erweitert:** Vormonat, **Aktueller Monat**, Vorjahr, **Aktuelles Jahr**, Gestern –
   der Jahresbericht nutzt dasselbe Prinzip.
 - Diagnose: „frühestes Datum ermitteln" protokolliert jetzt je Zähler die gefundenen Statistiktage.
@@ -133,7 +291,7 @@ Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
 ### Behoben (virtueller Zähler ergab fälschlich 0)
 - Die rückwirkende Berechnung nutzte das HA-Statistikfeld `sum`. Bei Zählern mit 0-Aussetzern
-  (z.B. Tasmota springt kurz auf 0 und zurück) bläht HA die `sum` auf – jeder Rücksprung wird als
+  (ein Zähler springt kurz auf 0 und zurück) bläht HA die `sum` auf – jeder Rücksprung wird als
   neuer Verbrauch addiert. Dadurch wurde der virtuelle Zähler massiv negativ und auf 0 gedeckelt.
 - Jetzt wird der echte **Zählerstand (`state`)** verwendet, mit **erzwungener Monotonie** (transiente
   0-/Rückwärts-Glitches werden abgefangen). Ergebnis stimmt jetzt (geliefert = Δ-Erzeugung − Δ-Einspeisung).
@@ -236,7 +394,7 @@ Erste Version.
 - Konfigurierbare Tarife (€/kWh) und Grundgebühr pro Periode.
 
 ### Robuste Zählerwerte
-- Erkennung und Bereinigung von Störungen: Sprünge auf 0 (z. B. Tasmota nach Update), hängende
+- Erkennung und Bereinigung von Störungen: Sprünge auf 0 (z. B. nach einem Firmware-Update des Auslesegeräts), hängende
   Sensoren („stale"), „unavailable"/„unknown", Mess-Jitter und unrealistische Sprünge.
 - Fortlaufender, stabiler Zählerstand („effective").
 
