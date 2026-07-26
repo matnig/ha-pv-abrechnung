@@ -69,7 +69,7 @@ function buildHa({ kwp = 20, consumptionKwhPerDay = 40, nightShare = 0.35, withK
   return {
     statisticsDuringPeriod: async (ids) => ({ [ids[0]]: data[ids[0]] || [] }),
     listAllStates: async () => states,
-    getHaConfig: async () => ({ latitude: 51.76, longitude: 7.89 }),
+    getHaConfig: async () => ({ latitude: 51.0, longitude: 10.0 }),
   };
 }
 

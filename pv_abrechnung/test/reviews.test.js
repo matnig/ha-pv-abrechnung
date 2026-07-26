@@ -28,9 +28,9 @@ test('listAnomalies sammelt Auffälligkeiten aus Snapshots und blendet _batterie
 test('setReview speichert Text, Einstufung und HA-Nutzer/Zeit; attachReviews heftet an', () => {
   const list = reviews.listAnomalies();
   const target = list.find((a) => a.type === 'stale');
-  const r = reviews.setReview(target.id, { note: 'nur Nachtruhe', classification: 'unkritisch', user: { id: 'u1', name: 'Matteus' } });
+  const r = reviews.setReview(target.id, { note: 'nur Nachtruhe', classification: 'unkritisch', user: { id: 'u1', name: 'Testnutzer' } });
   assert.strictEqual(r.classification, 'unkritisch');
-  assert.strictEqual(r.reviewedByName, 'Matteus');
+  assert.strictEqual(r.reviewedByName, 'Testnutzer');
   assert.ok(r.reviewedAt > 0);
 
   // bereits bewertet -> unveränderlich (wirft ALREADY_REVIEWED)
@@ -141,12 +141,12 @@ test('listAnomaliesInRange filtert nach Zeitbereich, lässt reportedAt unangetas
 test('anomaliesCsv: Kopf, Spalten, Bewertung und Excel-taugliches Quoting', () => {
   const csv = reviews.anomaliesCsv(
     [
-      { at: 1700000000000, name: 'Zähler "A"', entityId: 'sensor.a', type: 'stale', review: { classification: 'kritisch', note: 'echter; Ausfall', reviewedByName: 'Matteus', reviewedAt: 1700000100000, reportedAt: 1700000200000 } },
+      { at: 1700000000000, name: 'Zähler "A"', entityId: 'sensor.a', type: 'stale', review: { classification: 'kritisch', note: 'echter; Ausfall', reviewedByName: 'Testnutzer', reviewedAt: 1700000100000, reportedAt: 1700000200000 } },
       { at: 1700000300000, name: 'B', entityId: 'sensor.b', type: 'offline', review: null },
     ],
-    { anlagenName: 'Scharkon', from: 1700000000000, to: 1700001000000, by: 'Matteus' }
+    { anlagenName: 'Beispielanlage', from: 1700000000000, to: 1700001000000, by: 'Testnutzer' }
   );
-  assert.ok(csv.includes('"Anlage";"Scharkon"'));
+  assert.ok(csv.includes('"Anlage";"Beispielanlage"'));
   assert.ok(csv.includes('Zeitraum'));
   assert.ok(csv.includes('Zeit;Zaehler;EntityId;Typ'), 'Spaltenkopf vorhanden');
   assert.ok(csv.includes('"Zähler ""A"""'), 'Anführungszeichen im Namen korrekt verdoppelt');
