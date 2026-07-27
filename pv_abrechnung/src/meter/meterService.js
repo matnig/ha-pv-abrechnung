@@ -3,6 +3,7 @@
 const { readJson, writeJson } = require('../store/store');
 const haClient = require('../ha/haClient');
 const { processReading, swapMeter } = require('./meterProcessor');
+const { checkBalance } = require('./plausibility');
 const { toDateStr } = require('../billing/periods');
 
 const SNAP_FILE = 'snapshots.json';
@@ -14,6 +15,8 @@ function loadSnapshots() {
 function saveSnapshots(snap) {
   writeJson(SNAP_FILE, snap);
 }
+
+const round3 = (n) => Math.round((n + Number.EPSILON) * 1000) / 1000;
 
 const UNAVAILABLE = new Set(['unavailable', 'unknown', 'none', '', null, undefined]);
 
@@ -32,6 +35,11 @@ async function pollOnce(config, opts = {}) {
   const faultAfter = mc.faultAfterMinutes ?? 120;
 
   const snap = loadSnapshots();
+  // Stände vor diesem Durchlauf – daraus ergeben sich die Zuwächse für die Bilanzprüfung.
+  const prevEffective = {};
+  for (const m of config.meters || []) {
+    if (m.entityId && snap[m.entityId]) prevEffective[m.entityId] = snap[m.entityId].lastEffective;
+  }
   const results = [];
   const alerts = [];
   const dayKey = toDateStr(new Date(now));
@@ -199,6 +207,7 @@ async function pollOnce(config, opts = {}) {
           name: b.name || (st.attributes && st.attributes.friendly_name) || b.entityId,
           value: Number.isFinite(v) ? v : null,
           unit: (st.attributes && st.attributes.unit_of_measurement) || '%',
+          kwh: Number(b.kwh) || null, // nutzbare Kapazität – nötig für die Energiebilanz
           ts: now,
         });
       } catch {
@@ -212,6 +221,86 @@ async function pollOnce(config, opts = {}) {
     delete snap._batteries;
   }
   delete snap._battery; // altes Einzel-Feld wird nicht mehr gepflegt
+
+  // --- Plausibilitätsprüfung der Energiebilanz ---------------------------------------------
+  // Prüft, ob Erzeugung, Einspeisung, Netzbezug, Verbrauch und die Akku-Energie im abgelaufenen
+  // Intervall zueinander passen. Das ersetzt die frühere „Wert steht still"-Meldung, die bei
+  // Energiezählern zwangsläufig Fehlalarme erzeugt hat.
+  const deltas = {};
+  for (const meter of config.meters || []) {
+    if (!meter.entityId || !meter.role) continue;
+    const e = snap[meter.entityId];
+    if (!e || !e.state) continue;
+    const prevEff = prevEffective[meter.entityId];
+    const nowEff = e.lastEffective;
+    if (prevEff == null || nowEff == null) continue;
+    const d = nowEff - prevEff;
+    if (d > 0) deltas[meter.role] = round3((deltas[meter.role] || 0) + d);
+  }
+
+  // Akku-Energie im Intervall. Zwei Wege, der genauere gewinnt:
+  //   1. Echte Energiezähler des Speichers (Rollen akku_laden / akku_entladen)
+  //   2. Sonst gerechnet: ΔLadestand [%] / 100 × nutzbare Kapazität [kWh]
+  let akkuKwh = null;
+  let akkuQuelle = null;
+  let socJetzt = null;
+  if (deltas.akku_laden != null || deltas.akku_entladen != null) {
+    akkuKwh = round3((deltas.akku_laden || 0) - (deltas.akku_entladen || 0));
+    akkuQuelle = 'zaehler';
+  }
+  const prevBat = snap._batteriesPrev || [];
+  for (const b of snap._batteries || []) {
+    if (b.value == null) continue;
+    socJetzt = socJetzt == null ? b.value : Math.max(socJetzt, b.value);
+    if (akkuQuelle === 'zaehler') continue; // Zähler ist genauer
+    const kap = Number(b.kwh) || 0;
+    const vorher = prevBat.find((x) => x.entityId === b.entityId);
+    if (!kap || !vorher || vorher.value == null) continue;
+    akkuKwh = round3((akkuKwh || 0) + ((b.value - vorher.value) / 100) * kap);
+    akkuQuelle = 'ladestand';
+  }
+
+  const dauerMin = snap._lastBalanceTs ? (now - snap._lastBalanceTs) / 60000 : null;
+  // Nur prüfen, wenn ein sinnvolles Intervall vorliegt (nicht nach langer Pause, sonst
+  // vermischen sich Lade- und Entladephasen und die Bilanz ist zwangsläufig unscharf).
+  if (dauerMin != null && dauerMin >= 5 && dauerMin <= 60 && Object.keys(deltas).length) {
+    const findings = checkBalance(
+      {
+        erzeugung: deltas.erzeugung || 0,
+        einspeisung: deltas.einspeisung || 0,
+        netzbezug: deltas.netzbezug || 0,
+        verbrauch: deltas.verbrauch != null ? deltas.verbrauch : null,
+        akkuKwh,
+        akkuSocProzent: socJetzt,
+        dauerMinuten: dauerMin,
+        akkuImPvZaehler: config.pvZaehlerUmfang === 'solar_und_akku',
+      },
+      config.plausibility || {}
+    );
+    for (const f of findings) {
+      // Je Art nur einmal pro Stunde protokollieren – ein Sensorfehler besteht über mehrere
+      // Intervalle und soll die Liste nicht zumüllen.
+      const key = '_plaus_' + f.type;
+      const letzte = snap[key] || 0;
+      if (now - letzte < 3600000) continue;
+      snap[key] = now;
+      const target = (config.meters || []).find((m) => m.role === 'erzeugung') || (config.meters || [])[0];
+      const bag = target && snap[target.entityId];
+      if (bag) {
+        bag.anomalies = (bag.anomalies || []).concat({
+          type: f.type,
+          at: now,
+          entityId: target.entityId,
+          name: 'Energiebilanz',
+          text: f.text,
+          detail: f.detail,
+        });
+        if (bag.anomalies.length > MAX_ANOMALIES) bag.anomalies = bag.anomalies.slice(-MAX_ANOMALIES);
+      }
+    }
+  }
+  snap._batteriesPrev = (snap._batteries || []).map((b) => ({ entityId: b.entityId, value: b.value }));
+  snap._lastBalanceTs = now;
 
   saveSnapshots(snap);
   return { at: now, meters: results, alerts };

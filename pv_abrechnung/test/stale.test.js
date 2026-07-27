@@ -1,5 +1,13 @@
 'use strict';
 
+// Regressionstest gegen die Fehlalarm-Flut „Wert stand still".
+//
+// Grundlage sind Messreihen einer echten Anlage über 26 Tage: dort blieben die Zählerstände
+// regelmäßig sehr lange konstant, ohne dass etwas defekt war – PV nachts 10-12 h, Netzbezug
+// bis 36 h (Akku deckte die Last), Einspeisung bis 42 h (trübes Wetter). Die frühere Prüfung
+// „Wert seit X Minuten unverändert" erzeugte daraus 89 Meldungen. Ein Energiezähler zählt nur,
+// wenn Energie fließt – Stillstand ist deshalb kein Fehlersignal und wird nicht mehr gemeldet.
+
 const test = require('node:test');
 const assert = require('node:assert');
 const os = require('os');
@@ -12,70 +20,82 @@ const { processReading } = require('../src/meter/meterProcessor');
 const { pollOnce } = require('../src/meter/meterService');
 
 const MIN = 60000;
-const cfg = { staleMinutes: 180 };
 const types = (r) => r.anomalies.map((a) => a.type);
 
-test('stillstehender Zähler mit frischem last_reported -> KEIN stale (Kern-Fehlalarm)', () => {
-  const now = 1000 * MIN;
-  // Wert seit 10 h unverändert (last_updated alt), Sensor meldet aber laufend (last_reported frisch)
-  const prev = processReading(null, { raw: 500, now: now - 600 * MIN, lastUpdated: now - 600 * MIN, lastReported: now - 600 * MIN }, cfg).state;
-  const r = processReading(prev, { raw: 500, now, lastUpdated: now - 600 * MIN, lastReported: now - 2 * MIN }, cfg);
-  assert.ok(!types(r).includes('stale'), 'lebender Sensor darf nicht als stale gemeldet werden');
+test('lange konstanter Zählerstand löst keine Meldung aus – auch ohne last_reported', () => {
+  const now = 3000 * MIN;
+  let state = processReading(null, { raw: 500, now: 0, lastUpdated: 0 }, {}).state;
+  // 50 Stunden derselbe Wert, Zeitstempel bleibt alt (so verhalten sich viele Integrationen)
+  for (let t = 10 * MIN; t <= now; t += 10 * MIN) {
+    const r = processReading(state, { raw: 500, now: t, lastUpdated: 0, lastReported: null }, {});
+    state = r.state;
+    assert.ok(!types(r).includes('stale'), `keine Stillstand-Meldung (bei Minute ${t / MIN})`);
+  }
 });
 
-test('echter Ausfall: auch last_reported alt -> stale, aber nur EINMAL pro Phase', () => {
-  const now = 1000 * MIN;
-  const prev = processReading(null, { raw: 500, now: now - 600 * MIN, lastUpdated: now - 600 * MIN, lastReported: now - 600 * MIN }, cfg).state;
-  const r1 = processReading(prev, { raw: 500, now, lastUpdated: now - 600 * MIN, lastReported: now - 600 * MIN }, cfg);
-  assert.ok(types(r1).includes('stale'), 'toter Sensor muss gemeldet werden');
-
-  // gleicher Zustand beim nächsten Poll -> keine Flut neuer Einträge
-  const r2 = processReading(r1.state, { raw: 500, now: now + 10 * MIN, lastUpdated: now - 600 * MIN, lastReported: now - 600 * MIN }, cfg);
-  assert.ok(!types(r2).includes('stale'), 'stale nur einmal pro Hänge-Phase');
-
-  // Sensor meldet wieder -> Phase beendet, danach erneut meldefähig
-  const r3 = processReading(r2.state, { raw: 500, now: now + 20 * MIN, lastUpdated: now - 600 * MIN, lastReported: now + 19 * MIN }, cfg);
-  assert.ok(!types(r3).includes('stale'));
-  const r4 = processReading(r3.state, { raw: 500, now: now + 900 * MIN, lastUpdated: now - 600 * MIN, lastReported: now + 19 * MIN }, cfg);
-  assert.ok(types(r4).includes('stale'), 'neue Hänge-Phase wird wieder gemeldet');
+test('nachts stillstehende PV erzeugt keine Meldung (Kernfall der Fehlalarme)', () => {
+  // Tagsüber zählt der Zähler, nachts nicht – über mehrere Tage.
+  let state = null;
+  let raw = 1000;
+  let lastUpdated = 0;
+  const gemeldet = [];
+  for (let stunde = 0; stunde < 24 * 5; stunde++) {
+    const t = stunde * 60 * MIN;
+    const tages = stunde % 24;
+    if (tages >= 8 && tages <= 18) {
+      raw += 3; // Ertrag
+      lastUpdated = t;
+    }
+    const r = processReading(state, { raw, now: t, lastUpdated, lastReported: null }, {});
+    state = r.state;
+    for (const a of r.anomalies) gemeldet.push(a.type);
+  }
+  assert.deepStrictEqual([...new Set(gemeldet)], [], `keine Auffälligkeiten erwartet, waren: ${gemeldet}`);
 });
 
-test('peersActive: anderer Zähler zählt hoch -> stillstehender Zähler löst keinen Alarm aus', () => {
-  const now = 1000 * MIN;
-  const prev = processReading(null, { raw: 500, now: now - 600 * MIN, lastUpdated: now - 600 * MIN }, cfg).state;
-  // altes HA ohne last_reported: nur last_updated verfügbar und alt
-  const alone = processReading(prev, { raw: 500, now, lastUpdated: now - 600 * MIN }, cfg);
-  assert.ok(types(alone).includes('stale'), 'ohne Peer-Aktivität weiterhin erkennbar');
-
-  const withPeer = processReading(prev, { raw: 500, now, lastUpdated: now - 600 * MIN, peersActive: true }, cfg);
-  assert.ok(!types(withPeer).includes('stale'), 'Einspeisung läuft -> stillstehender Netzbezug ist erklärt');
+test('echte Ausfälle werden weiterhin erkannt: unavailable und Zählerabfall', () => {
+  let state = processReading(null, { raw: 500, now: 0, lastUpdated: 0 }, {}).state;
+  const un = processReading(state, { raw: 'unavailable', available: false, now: 10 * MIN }, {});
+  assert.ok(types(un).includes('unavailable'), 'Sensor nicht verfügbar wird gemeldet');
+  const drop = processReading(state, { raw: 0, now: 20 * MIN, lastUpdated: 20 * MIN }, {});
+  assert.ok(types(drop).includes('drop_detected'), 'Zählerabfall wird gemeldet');
 });
 
-test('Integration: PV speist ein, Netzbezug steht -> keine stale-Auffälligkeit am Netzbezug', async () => {
+test('Integration: eine Woche Nachtstillstand über pollOnce erzeugt keine Auffälligkeit', async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'pv-stale-int-'));
   const config = {
     meters: [
-      { id: 'm1', name: 'Einspeisung', entityId: 'sensor.feed', role: 'einspeisung' },
+      { id: 'm1', name: 'PV', entityId: 'sensor.pv', role: 'erzeugung' },
       { id: 'm2', name: 'Netzbezug', entityId: 'sensor.grid', role: 'netzbezug' },
     ],
     virtualMeters: [],
-    meterCfg: { staleMinutes: 180 },
+    batteries: [],
+    meterCfg: {},
   };
-  const t0 = Date.now();
-  const old = new Date(t0 - 600 * MIN).toISOString();
-  // Basislinie
-  let feed = 10;
-  const states = () => ({
-    'sensor.feed': { state: String(feed), attributes: { unit_of_measurement: 'kWh' }, last_updated: old, last_changed: old },
-    'sensor.grid': { state: '200', attributes: { unit_of_measurement: 'kWh' }, last_updated: old, last_changed: old },
-  });
-  await pollOnce(config, { now: t0, getState: async (id) => states()[id] });
-
-  // Einspeisung steigt, Netzbezug bleibt konstant (klassische Mittagssituation)
-  feed = 12;
-  await pollOnce(config, { now: t0 + 10 * MIN, getState: async (id) => states()[id] });
-
+  const t0 = Date.UTC(2026, 5, 1, 0, 0, 0);
+  let pv = 1000;
+  let grid = 500;
+  let pvChanged = t0;
+  let gridChanged = t0;
+  for (let stunde = 0; stunde < 24 * 7; stunde++) {
+    const now = t0 + stunde * 3600000;
+    const h = new Date(now).getUTCHours();
+    if (h >= 8 && h <= 18) {
+      pv += 4;
+      pvChanged = now;
+    } else if (h >= 19 || h <= 5) {
+      grid += 0.5; // nachts etwas Bezug
+      gridChanged = now;
+    }
+    const states = {
+      'sensor.pv': { state: String(pv), attributes: { unit_of_measurement: 'kWh' }, last_updated: new Date(pvChanged).toISOString() },
+      'sensor.grid': { state: String(grid), attributes: { unit_of_measurement: 'kWh' }, last_updated: new Date(gridChanged).toISOString() },
+    };
+    await pollOnce(config, { now, getState: async (id) => states[id] });
+  }
   const snap = require('../src/store/store').readJson('snapshots.json', {});
-  const gridAnoms = (snap['sensor.grid'].anomalies || []).map((a) => a.type);
-  assert.ok(!gridAnoms.includes('stale'), `Netzbezug darf nicht stale sein, war: ${gridAnoms.join(',')}`);
+  for (const id of ['sensor.pv', 'sensor.grid']) {
+    const arten = (snap[id].anomalies || []).map((a) => a.type);
+    assert.deepStrictEqual([...new Set(arten)], [], `${id} sollte unauffällig sein, war: ${arten}`);
+  }
 });

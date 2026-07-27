@@ -4,7 +4,7 @@ const { round2 } = require('./resolver');
 
 // Vorzeichen je Rolle: Verbrauch/Netzbezug/Lieferung = Kosten (+), Erzeugung = rein informativ.
 // Einspeisung wird dynamisch behandelt (siehe unten), abhängig davon, wer die Vergütung bekommt.
-const ROLE_SIGN = { verbrauch: 1, netzbezug: 1, lieferung: 1, einspeisung: 0, erzeugung: 0 };
+const ROLE_SIGN = { verbrauch: 1, netzbezug: 1, lieferung: 1, einspeisung: 0, erzeugung: 0, akku_laden: 0, akku_entladen: 0 };
 
 // Jahresgebühr anteilig auf die Abrechnungsperiode umlegen.
 function periodFactor(type) {

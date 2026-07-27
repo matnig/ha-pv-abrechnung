@@ -87,8 +87,8 @@ function renderBatteries() {
   if (!el) return;
   const list = config.batteries || [];
   el.innerHTML = list.length
-    ? `<table><thead><tr><th>Name</th><th>Entität</th><th></th></tr></thead><tbody>${list
-        .map((b, i) => `<tr><td>${esc(b.name || '')}</td><td class="tag">${esc(b.entityId)}</td><td><button class="danger" onclick="delBattery(${i})">×</button></td></tr>`)
+    ? `<table><thead><tr><th>Name</th><th>Entität</th><th class="num">Kapazität</th><th></th></tr></thead><tbody>${list
+        .map((b, i) => `<tr><td>${esc(b.name || '')}</td><td class="tag">${esc(b.entityId)}</td><td class="num">${b.kwh ? esc(String(b.kwh)) + ' kWh' : '<span style="color:#b45309">Kapazität fehlt</span>'}</td><td><button class="danger" onclick="delBattery(${i})">×</button></td></tr>`)
         .join('')}</tbody></table>`
     : '<p class="mini">Noch keine Akkus.</p>';
 }
@@ -97,8 +97,11 @@ function addBattery() {
   if (!entityId) return flash('Keine Akku-Entität gewählt', false);
   const ent = batteryEntities.find((e) => e.entityId === entityId);
   config.batteries = config.batteries || [];
-  config.batteries.push({ id: 'bat' + Date.now(), name: $('bName').value || (ent ? ent.name : entityId), entityId });
+  const kwh = $('bKwh') && $('bKwh').value !== '' ? Number($('bKwh').value) : null;
+  config.batteries.push({ id: 'bat' + Date.now(), name: $('bName').value || (ent ? ent.name : entityId), entityId, kwh });
   $('bName').value = '';
+  if ($('bKwh')) $('bKwh').value = '';
+  if (!kwh) flash('Akku ohne Kapazität gespeichert – für die Plausibilitätsprüfung bitte die nutzbare Kapazität (kWh) nachtragen.', false);
   renderBatteries();
 }
 function delBattery(i) {
@@ -233,6 +236,7 @@ function fillForm() {
   $('smtpHost').value = sm.host; $('smtpPort').value = sm.port; $('smtpSecure').value = String(!!sm.secure);
   $('smtpUser').value = sm.user; $('smtpPass').value = sm.pass; $('smtpFrom').value = sm.from;
   $('useStats').checked = config.useStatistics !== false;
+  if ($('pvUmfangHybrid')) $('pvUmfangHybrid').checked = config.pvZaehlerUmfang === 'solar_und_akku';
   renderMeters();
   renderVMeters();
   renderDraftComponents();
@@ -265,6 +269,7 @@ function collectForm() {
     user: $('smtpUser').value, pass: $('smtpPass').value, from: $('smtpFrom').value,
   };
   config.useStatistics = $('useStats').checked;
+  if ($('pvUmfangHybrid')) config.pvZaehlerUmfang = $('pvUmfangHybrid').checked ? 'solar_und_akku' : 'nur_solar';
 }
 
 // ---- Einrichtungshilfe (Ja/Nein-Wizard) ----
@@ -473,6 +478,12 @@ const ANOMALY_LABEL = {
   offline_fault: 'STÖRUNG: Sensor >2h offline', reset: 'Zähler-Reset (fortgeführt)',
   stale: 'Wert stand still', unavailable: 'Sensor nicht verfügbar', spike: 'unrealistischer Sprung',
   jitter: 'kleiner Rückwärts-Sprung', transient: 'kurzzeitige Störung (Wert kam zurück)', error: 'Lesefehler',
+  bilanz_einspeisung_ohne_quelle: 'Energiebilanz: Einspeisung ohne Quelle',
+  bilanz_erzeugung_verschwindet: 'Energiebilanz: erzeugte Energie nicht wiederzufinden',
+  bilanz_akku_ohne_quelle: 'Energiebilanz: Akku lädt ohne Quelle',
+  bilanz_kein_export_bei_vollem_akku: 'Energiebilanz: voller Akku, aber keine Einspeisung',
+  bilanz_bezug_und_einspeisung: 'Energiebilanz: gleichzeitig Bezug und Einspeisung',
+  bilanz_stimmt_nicht: 'Energiebilanz geht nicht auf',
 };
 
 let archivedAnomalies = [];
@@ -502,6 +513,7 @@ async function loadAnomalies() {
                   <span class="tag">${new Date(a.at).toLocaleString('de-DE')}</span></div>
                 <div>${anomalyBadge(null)}</div>
               </div>
+              ${a.text ? `<div class="mini" style="color:var(--text);margin-top:4px">${esc(a.text)}</div>` : ''}
               <div class="row" style="margin-top:6px">
                 <div style="flex:2"><input id="note_${esc(a.id)}" placeholder="Bewertungstext…" /></div>
                 <div style="max-width:150px"><button class="sec" onclick="reviewAnomaly('${encodeURIComponent(a.id)}','unkritisch')">unkritisch</button></div>
@@ -616,6 +628,17 @@ async function exportIncidentMail() {
     loadAnomalies();
   } catch (e) {
     flash('Export fehlgeschlagen: ' + e.message, false);
+  }
+}
+
+async function purgeStale() {
+  if (!confirm('Alle noch nicht bewerteten „Wert stand still"-Meldungen entfernen?\n\nDiese Prüfung wurde abgeschafft, weil ein stillstehender Energiezähler kein Fehler ist. Bereits bewertete Einträge bleiben erhalten.')) return;
+  try {
+    const r = await api('api/anomalies/purge', { method: 'POST', body: JSON.stringify({ types: ['stale'] }) });
+    flash(`${r.entfernt} alte Meldung(en) entfernt${r.behalten ? `, ${r.behalten} bereits bewertete behalten` : ''}.`);
+    loadAnomalies();
+  } catch (e) {
+    flash('Aufräumen fehlgeschlagen: ' + e.message, false);
   }
 }
 

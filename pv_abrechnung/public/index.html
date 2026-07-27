@@ -108,6 +108,8 @@
           <option value="netzbezug">Netzbezug</option>
           <option value="einspeisung">Einspeisung</option>
           <option value="erzeugung">PV-Erzeugung</option>
+          <option value="akku_laden">Akku-Ladung (Energiezähler)</option>
+          <option value="akku_entladen">Akku-Entladung (Energiezähler)</option>
         </select></div>
       <div style="max-width:120px"><button onclick="addMeter()">+ Hinzufügen</button></div>
     </div>
@@ -120,6 +122,8 @@
         <li><b>Einspeisung</b>: ins Netz eingespeiste kWh. Wird als <i>Gutschrift</i> gegengerechnet.</li>
         <li><b>PV-Erzeugung</b>: von der Anlage produzierte kWh. Nur zur <i>Information</i>, kein Geldbetrag.</li>
         <li><b>Lieferung an Kunde</b>: nur für virtuelle Zähler (z.B. Erzeugung − Einspeisung). Wird als <i>Kosten</i> berechnet.</li>
+        <li><b>Akku-Ladung / Akku-Entladung</b>: Energiezähler des Speichers (kWh). Nicht abgerechnet – sie dienen der
+          <i>Plausibilitätsprüfung</i> und sind genauer als die Rechnung über Kapazität und Ladestand.</li>
       </ul>
     </div>
 
@@ -129,10 +133,27 @@
     <div class="row" style="margin-top:10px">
       <div><label>Akku-Ladestand (%)</label><select id="bEntity"></select></div>
       <div><label>Name</label><input id="bName" placeholder="z.B. Hausspeicher" /></div>
+      <div style="max-width:150px"><label>Kapazität (kWh)</label><input id="bKwh" type="number" step="0.1" placeholder="z.B. 10" /></div>
       <div style="max-width:120px"><button onclick="addBattery()">+ Hinzufügen</button></div>
     </div>
     <div class="hint" id="bHint">Liste zeigt Sensoren mit Einheit <b>%</b> (Ladezustand) – bewusst keine Energiezähler.
       <a href="#" onclick="loadBatteryEntities();return false">neu laden</a></div>
+    <div class="legend" style="margin-top:12px">
+      <b>Wozu die Kapazität?</b>
+      <div class="hint" style="margin-top:4px">Aus Ladestand und Kapazität rechnet das System die Energie aus, die in den
+        Akku geht oder ihn verlässt (<i>Änderung in % ÷ 100 × Kapazität</i>). Nur damit lässt sich prüfen, ob Erzeugung,
+        Einspeisung, Netzbezug und Speicher zueinander passen. <b>Genauer ist es mit echten Zählern:</b> Wenn dein
+        Speicher Energiezähler für Laden und Entladen liefert, trage sie oben unter „Zähler" mit den Rollen
+        <b>Akku-Ladung</b> und <b>Akku-Entladung</b> ein – die haben dann Vorrang und die Kapazität ist nur noch
+        ergänzend.</div>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--text);margin-top:10px">
+        <input type="checkbox" id="pvUmfangHybrid" style="width:auto;margin-top:2px" />
+        <span><b>Der Erzeugungszähler zählt die Akku-Entladung mit</b> (Hybrid-Wechselrichter)</span>
+      </label>
+      <div class="hint" style="margin-top:4px">Bei vielen Hybrid-Wechselrichtern wird am Wechselstrom-Ausgang gemessen –
+        dort ist die Energie aus dem Speicher schon enthalten. Dann darf sie in der Bilanz nicht doppelt zählen.
+        <b>Nicht anhaken</b>, wenn der Zähler den reinen Solarertrag erfasst und der Speicher getrennt gemessen wird.</div>
+    </div>
   </div>
 
   <div class="card">
@@ -277,7 +298,13 @@
     <div class="row" style="margin-top:12px">
       <div style="max-width:240px"><button onclick="sendIncidentReport()">📧 Incident-Report absenden</button></div>
       <div style="max-width:300px"><button class="sec" onclick="toggleArchive()">Bearbeitete anzeigen/ausblenden</button></div>
+      <div style="max-width:320px"><button class="danger" onclick="purgeStale()">Alte „Wert stand still"-Meldungen entfernen</button></div>
     </div>
+    <div class="hint">Die Prüfung „Wert stand still" wurde entfernt: ein Energiezähler steht still, wenn keine Energie
+      fließt (nachts, bei geladenem Akku, bei trübem Wetter) – das ist kein Fehler. An Messdaten einer echten Anlage
+      erzeugte sie über 26 Tage 89 Meldungen, alle unbegründet. An ihre Stelle tritt die Prüfung der Energiebilanz.
+      Mit dem Knopf lassen sich die alten, noch <b>unbewerteten</b> Meldungen entfernen; bereits bewertete bleiben als
+      Dokumentation erhalten.</div>
     <div id="anomaliesArchive" class="mini" style="display:none;margin-top:10px"></div>
     <div id="incidentProtocol" class="mini" style="margin-top:12px"></div>
   </div>

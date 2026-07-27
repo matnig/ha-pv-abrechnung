@@ -44,6 +44,8 @@ function listAnomalies(opts = {}) {
         from: a.from,
         oldFinal: a.oldFinal,
         newStart: a.newStart,
+        text: a.text || null, // Bilanz-Meldungen bringen ihre eigene Erklärung mit
+        detail: a.detail || null,
         review: reviews[id] || null,
       });
     }
@@ -126,7 +128,7 @@ function anomaliesCsv(anomalies, meta = {}) {
         a.name || '',
         a.entityId || '',
         a.type || '',
-        ANOMALY_CSV_TEXT[a.type] || a.type || '',
+        a.text || ANOMALY_CSV_TEXT[a.type] || a.type || '',
         r.classification || 'nicht bewertet',
         r.note || '',
         r.reviewedByName || '',
@@ -150,6 +152,36 @@ function markReviewsReported(ids, at = Date.now()) {
   saveReviews(reviews);
 }
 
+/**
+ * Entfernt UNBEWERTETE Auffälligkeiten einer Art aus den Snapshots. Gedacht für Einträge, die
+ * durch eine überholte Prüfung entstanden sind (z.B. die früheren „Wert stand still"-Meldungen,
+ * die bei Energiezählern zwangsläufig auftraten). Bereits bewertete Einträge bleiben
+ * unangetastet – sie sind Teil der Dokumentation und unveränderlich.
+ * @returns {{entfernt:number, behalten:number}}
+ */
+function purgeUnreviewed(types) {
+  const arten = new Set(Array.isArray(types) ? types : [types]);
+  const snap = readJson(SNAP_FILE, {});
+  const reviews = loadReviews();
+  let entfernt = 0;
+  let behalten = 0;
+  for (const [key, e] of Object.entries(snap)) {
+    if (!e || !Array.isArray(e.anomalies)) continue;
+    e.anomalies = e.anomalies.filter((a) => {
+      if (!arten.has(a.type)) return true;
+      const id = anomalyId({ ...a, entityId: a.entityId || key });
+      if (reviews[id]) {
+        behalten++;
+        return true; // bewertete Einträge nie löschen
+      }
+      entfernt++;
+      return false;
+    });
+  }
+  if (entfernt) writeJson(SNAP_FILE, snap);
+  return { entfernt, behalten };
+}
+
 // Protokoll der abgesendeten Incident-Reports (wer/wann/wie viele).
 function logIncidentReport(entry) {
   const list = readJson(PROTO_FILE, []);
@@ -161,4 +193,4 @@ function loadProtocol() {
   return readJson(PROTO_FILE, []);
 }
 
-module.exports = { anomalyId, loadReviews, listAnomalies, listAnomaliesInRange, anomaliesCsv, setReview, attachReviews, markReviewsReported, logIncidentReport, loadProtocol };
+module.exports = { anomalyId, loadReviews, listAnomalies, listAnomaliesInRange, anomaliesCsv, setReview, purgeUnreviewed, attachReviews, markReviewsReported, logIncidentReport, loadProtocol };

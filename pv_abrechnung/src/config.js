@@ -16,6 +16,8 @@ const DEFAULT_CONFIG = {
   meters: [
     // { id, name, entityId, role }
     // role: 'erzeugung' | 'einspeisung' | 'netzbezug' | 'verbrauch'
+    //       | 'akku_laden' | 'akku_entladen'  (Energiezähler des Speichers, nur für die
+    //         Bilanzprüfung – genauer als die Rechnung über Kapazität × Ladestand)
   ],
   // Virtuelle, fortlaufende Zähler als Linearkombination echter Zähler.
   // Beispiel „an Kunde geliefert" = Erzeugung − Einspeisung:
@@ -43,9 +45,18 @@ const DEFAULT_CONFIG = {
     waermepumpe: false, // Kunde hat eine Wärmepumpe (verschiebbare Last)
     wallbox: false, // Kunde hat eine Wallbox/E-Auto (verschiebbare Last)
   },
+  // Zählt der Erzeugungszähler die Akku-Entladung mit? Bei Hybrid-Wechselrichtern, die am
+  // AC-Ausgang gemessen werden, ist das der Fall ('solar_und_akku'). Wird der reine Solarertrag
+  // erfasst (DC-seitig, Akku separat), gilt 'nur_solar'. Die Einstellung entscheidet, wie die
+  // Energiebilanz geprüft wird.
+  pvZaehlerUmfang: 'nur_solar', // 'nur_solar' | 'solar_und_akku'
+  plausibility: {}, // Feinjustierung der Bilanzprüfung (siehe meter/plausibility DEFAULTS)
   assess: {}, // überschriebene Annahmen der Wirtschaftlichkeitsrechnung (siehe assess/economics DEFAULTS)
   zielAmortisation: 10, // Jahre, die eine Investition höchstens brauchen darf
-  batteries: [], // optionale Akku-Ladestand-Sensoren (%) für den Status: [{ id, name, entityId }]
+  // Akkus: Ladestand-Sensor (%) und nutzbare Kapazität (kWh). Die Kapazität ist nötig, um aus
+  // einer Ladestandsänderung eine Energiemenge zu machen – nur damit lässt sich die
+  // Energiebilanz prüfen: [{ id, name, entityId, kwh }]
+  batteries: [],
   batterySensor: '', // DEPRECATED (Einzel-Sensor) – wird beim Laden nach batteries migriert
   anlagenName: '', // Name der PV-Anlage (im Betreff + Bericht + CSV)
   betreiber: '', // Anlagenbetreiber (Name/Anschrift, mehrzeilig möglich)
@@ -93,6 +104,8 @@ function loadConfig() {
     kunde: cfg.kunde || '',
     useStatistics: cfg.useStatistics !== false,
     plant: { ...DEFAULT_CONFIG.plant, ...(cfg.plant || {}) },
+    pvZaehlerUmfang: cfg.pvZaehlerUmfang === 'solar_und_akku' ? 'solar_und_akku' : 'nur_solar',
+    plausibility: { ...(cfg.plausibility || {}) },
     assess: { ...(cfg.assess || {}) },
     tariffs: { ...DEFAULT_CONFIG.tariffs, ...(cfg.tariffs || {}) },
     smtp: { ...DEFAULT_CONFIG.smtp, ...(cfg.smtp || {}) },

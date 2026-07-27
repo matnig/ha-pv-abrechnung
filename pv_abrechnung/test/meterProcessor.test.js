@@ -85,13 +85,13 @@ test('swapMeter ohne offene Störung tut nichts', () => {
   assert.strictEqual(res.swapped, false);
 });
 
-test('stale, unavailable, jitter, spike weiterhin korrekt', () => {
+test('unavailable, jitter, spike weiterhin korrekt – aber KEIN Stillstand-Alarm', () => {
   const base = { offset: 0, lastRaw: 100, lastRawTs: 0, lastChangeTs: 0, effective: 100, pending: null };
-  // Gerät meldet HA seit 200 min nichts mehr -> stale/offline
-  const stale = processReading(base, { raw: 100, now: 200 * MIN, lastUpdated: 0 }, { staleMinutes: 180 });
-  assert.ok(stale.anomalies.some((a) => a.type === 'stale'));
-  // flacher Wert, aber HA bekommt frische Updates (z.B. Akku deckt Last nachts) -> KEIN stale
-  const flat = processReading(base, { raw: 100, now: 200 * MIN, lastUpdated: 195 * MIN }, { staleMinutes: 180 });
+  // Ein unveränderter Zählerstand ist bei Energiezählern der Normalfall (nachts, Akku deckt die
+  // Last, trübes Wetter) und darf NIE gemeldet werden – egal wie alt der Zeitstempel ist.
+  const langeGleich = processReading(base, { raw: 100, now: 3000 * MIN, lastUpdated: 0 }, {});
+  assert.ok(!langeGleich.anomalies.some((a) => a.type === 'stale'), 'kein Stillstand-Alarm mehr');
+  const flat = processReading(base, { raw: 100, now: 200 * MIN, lastUpdated: 195 * MIN }, {});
   assert.ok(!flat.anomalies.some((a) => a.type === 'stale'));
 
   const un = feed([{ raw: 100, now: 0 }, { raw: 'x', available: false, now: H }]).last;

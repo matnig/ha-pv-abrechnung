@@ -192,6 +192,13 @@ function createServer() {
     });
   });
 
+  // Aufräumen: unbewertete Einträge einer überholten Prüfart entfernen (bewertete bleiben).
+  app.post('/api/anomalies/purge', (req, res) => {
+    const arten = (req.body && req.body.types) || ['stale'];
+    const r = reviews.purgeUnreviewed(arten);
+    res.json({ ok: true, ...r, types: arten });
+  });
+
   app.post('/api/anomalies/review', (req, res) => {
     const { id, note, classification } = req.body || {};
     if (!id) return res.status(400).json({ error: 'id fehlt' });

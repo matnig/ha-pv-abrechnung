@@ -93,27 +93,25 @@ function processReading(prev, reading, cfg = {}) {
     return done(s, s.offset + raw, true, anomalies);
   }
 
-  // "Hängt/offline" NIE anhand eines gleichbleibenden Werts: ein flacher Energiezähler ist normal
-  // (nachts, Akku deckt die Last, oder PV speist ein -> Netzbezug steht still).
+  // BEWUSST KEINE "Wert steht still"-Meldung mehr.
   //
-  // Maßgeblich ist `last_reported` (HA >= 2024.8): das wird bei JEDEM Melden des Sensors neu
-  // gesetzt, auch wenn der Wert identisch bleibt -> lebt der Sensor, gibt es kein "stale".
-  // `last_updated` allein wäre falsch, denn HA setzt es nur bei WERTänderung – ein stillstehender
-  // Zähler sähe damit immer nach Ausfall aus (Ursache der Fehlalarme beim Netzbezug).
-  // Zusätzliche Plausibilität: zählt zeitgleich ein anderer Zähler hoch (peersActive, z.B.
-  // Einspeisung/Erzeugung), ist ein stillstehender Netzbezug erklärt -> kein Alarm.
-  const lastSignal = reading.lastReported != null ? reading.lastReported : reading.lastUpdated;
-  const isStale =
-    lastSignal != null && now - lastSignal >= c.staleMinutes * 60000 && reading.peersActive !== true;
-  if (isStale) {
-    // Pro Hänge-Phase nur EINMAL melden (sonst bei jedem Poll ein neuer Eintrag).
-    if (s.staleReportedFor !== lastSignal) {
-      s.staleReportedFor = lastSignal;
-      anomalies.push({ type: 'stale', at: now, sinceUpdate: lastSignal, minutes: Math.round((now - lastSignal) / 60000) });
-    }
-  } else if (s.staleReportedFor != null) {
-    s.staleReportedFor = null; // Sensor meldet wieder -> Phase beendet
-  }
+  // Ein Energiezähler zählt nur, wenn Energie fließt – Stillstand ist der Normalfall, nicht ein
+  // Fehler: die PV erzeugt nachts nichts, der Netzbezug ruht, solange ein Akku die Last deckt,
+  // und bei trübem Wetter steht die Einspeisung. Messwerte einer realen Anlage über 26 Tage
+  // zeigten Konstant-Phasen von bis zu 36 Stunden (Netzbezug) und 42 Stunden (Einspeisung) –
+  // völlig unauffällig. Es gibt also keinen Schwellwert, der Normalbetrieb von einem Defekt
+  // trennt.
+  //
+  // Auch `last_reported` (HA >= 2024.8) hilft hier nicht zuverlässig: viele Integrationen
+  // schreiben den Zustand nur bei einer WERTänderung, dann ist `last_reported` genauso alt wie
+  // `last_updated` – ein lebender Sensor sähe weiter nach Ausfall aus.
+  //
+  // Echte Ausfälle werden unabhängig davon und verlässlich erkannt:
+  //   - Sensor meldet "unavailable"/"unknown"  -> unten `available === false`, plus Eskalation
+  //     im meterService (10 Min "möglicher Fehler", 2 Std "Störung")
+  //   - Home Assistant nicht erreichbar        -> im meterService als Ausfall protokolliert
+  //   - Zählerstand fällt ab                   -> pending/incident, weiter unten
+  //   - dauerhaft ertragslose Tage             -> Bereich "Bewertung" (Anlagen-Zustand)
 
   if (s.pending) {
     return resolvePending(s, raw, now, c, anomalies);

@@ -2,6 +2,48 @@
 
 Alle nennenswerten Änderungen an diesem Add-on werden hier dokumentiert.
 
+## 0.6.0 – 2026-07-27
+
+### Schluss mit den „Wert stand still"-Fehlalarmen
+- Die Prüfung auf einen unveränderten Zählerstand wurde **entfernt**. Ein Energiezähler zählt
+  nur, wenn Energie fließt – Stillstand ist der Normalfall: die PV erzeugt nachts nichts, der
+  Netzbezug ruht, solange der Akku die Last deckt, und bei trübem Wetter steht die Einspeisung.
+  An Messdaten einer realen Anlage über 26 Tage lagen die Konstant-Phasen bei bis zu 36 Stunden
+  (Netzbezug) und 42 Stunden (Einspeisung), ohne dass etwas defekt war; die alte Prüfung
+  erzeugte daraus **89 Meldungen** – alle unbegründet.
+- Auch `last_reported` löst das nicht zuverlässig: viele Integrationen schreiben den Zustand nur
+  bei einer Wertänderung, dann ist dieser Zeitstempel genauso alt wie `last_updated`.
+- Echte Ausfälle werden unverändert erkannt: Sensor meldet „unavailable", Home Assistant nicht
+  erreichbar, Zählerstand fällt ab – jeweils mit Eskalation nach 10 Minuten und 2 Stunden.
+- Mit dem Knopf **„Alte ‚Wert stand still'-Meldungen entfernen"** lassen sich die bereits
+  entstandenen, noch unbewerteten Einträge aufräumen. Bewertete bleiben als Dokumentation.
+
+### Neu: Prüfung der Energiebilanz
+An die Stelle der Stillstandsmeldung tritt eine Prüfung, ob die Messwerte **zueinander passen**.
+Für jedes Intervall gilt: Erzeugung + Netzbezug + Akku-Entladung = Verbrauch + Einspeisung +
+Akku-Ladung. Gemeldet wird nur, was physikalisch nicht zusammenpasst:
+- Einspeisung ohne Quelle (mehr eingespeist als erzeugt und aus dem Akku entnommen)
+- erzeugte Energie ist nicht wiederzufinden (nur mit Verbrauchszähler eindeutig)
+- Akku lädt ohne Quelle – Hinweis auf falsche Kapazität oder falschen Zähler
+- voller Akku und Erzeugung, aber keine Einspeisung
+- gleichzeitig beziehen und einspeisen
+- Gesamtbilanz geht nicht auf (falsch skalierter Zähler)
+
+Bewusst nicht geprüft wird „PV erzeugt und trotzdem Netzbezug": ohne Verbrauchszähler erklärt
+der unbekannte Verbrauch jede solche Konstellation – an echten Daten war das der häufigste
+Fehlalarm. Dieselben Messdaten laufen mit der neuen Prüfung **ohne eine einzige Meldung** durch.
+
+### Akku: Kapazität, eigene Zähler und Hybrid-Wechselrichter
+- Beim Akku lässt sich die **nutzbare Kapazität (kWh)** eintragen. Daraus und aus dem Ladestand
+  errechnet das System die Energie, die in den Speicher geht oder ihn verlässt.
+- Alternativ und genauer: **eigene Energiezähler** des Speichers mit den neuen Rollen
+  **Akku-Ladung** und **Akku-Entladung**. Sind sie vorhanden, haben sie Vorrang.
+- Neuer Schalter **„Der Erzeugungszähler zählt die Akku-Entladung mit"** für
+  Hybrid-Wechselrichter, die am Wechselstrom-Ausgang gemessen werden. Dann steckt die
+  Speicherenergie bereits im Erzeugungswert und wird in der Bilanz nicht doppelt gezählt.
+- Meldungen der Bilanzprüfung erscheinen mit vollständiger Erklärung in der Oberfläche und im
+  CSV-Export.
+
 ## 0.5.1 – 2026-07-26
 
 ### Behoben: Add-on-Manifest war fehlerhaft – es erschien kein Update
